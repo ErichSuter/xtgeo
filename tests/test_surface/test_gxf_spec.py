@@ -43,7 +43,7 @@ def test_read_minimal_gxf(tmp_path):
 def test_read_gxf_data(testdata_path):
     """Test reading GXF data from a file"""
     tpath = pathlib.Path(testdata_path)
-    gxf_file = tpath / "surfaces" / "etc" / "fdata_test2.gxf"
+    gxf_file = tpath / "surfaces" / "etc" / "fdata_test.gxf"
     gxf_data = xtgeo.surface_from_file(gxf_file, fformat="gxf")
     print(gxf_data)
     gxf_data.quickplot()

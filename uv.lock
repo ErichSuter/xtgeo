@@ -584,6 +584,12 @@ wheels = [
 ]
 
 [[package]]
+name = "gdal"
+version = "3.12.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/65/cb/64ab7a1dd03e53870fd4c993d72baf6881a663953d2d2e8dd92098c12e94/gdal-3.12.3.tar.gz", hash = "sha256:a5aebb8f50b8f4d5b0c238cc9a6c988be3041bc276535daeddc399fa6ec13972", size = 899374, upload-time = "2026-03-20T13:48:41.273Z" }
+
+[[package]]
 name = "gstools"
 version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2526,6 +2532,7 @@ name = "xtgeo"
 source = { editable = "." }
 dependencies = [
     { name = "deprecation" },
+    { name = "gdal" },
     { name = "gstools" },
     { name = "h5py" },
     { name = "hdf5plugin" },
@@ -2580,6 +2587,7 @@ requires-dist = [
     { name = "cmake-format", marker = "extra == 'dev'" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=4.1" },
     { name = "deprecation" },
+    { name = "gdal" },
     { name = "gstools" },
     { name = "h5py", specifier = ">=3" },
     { name = "hdf5plugin", specifier = ">=2.3" },
