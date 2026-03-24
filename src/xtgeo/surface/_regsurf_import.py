@@ -154,6 +154,156 @@ def import_irap_ascii(mfile: FileWrapper, **_):
     return args
 
 
+def import_gxf_ascii(mfile: FileWrapper, **_):
+    """Import GXF format, as seen in e.g. OW.
+    The GXF format is a simple ascii format with a header and values.
+    See https://pubs.usgs.gov/of/1999/of99-514/grids/gxf.pdf
+    The header is like this:
+    ! comments starts with '!'
+    #POINTS
+    "330"                     << number of columns
+    #ROWS
+    "208"                     << number of rows
+    #PTSEPARATION
+    "30.4800600"              << point separation in x direction (xinc)
+    #RWSEPARATION
+    "30.4800600"              << row separation in y direction (yinc)
+    #XORIGIN
+    "427391.726575"           << x origin (xori)
+    #YORIGIN
+    "7250373.922731"          << y origin (yori)
+    #ROTATION
+    "66.57993141719481"       << rotation in degrees (rotation)
+    #DUMMY
+    "9999999.0"               << value in undefined nodes
+    ##XMAX
+    "439101.301489"           << x maximum (not used)
+    ##YMAX
+    "7260149.299141"          << y maximum (not used)
+    #GRID
+      9999999.0      9999999.0     9999999.0         9999999.0         9999999.0
+      9999999.0      9999999.0     9999999.0         9999999.0         9999999.0
+      9999999.0      9999999.0     9999999.0         9999999.0         9999999.0
+      3288.2225       2837.758      2844.5764      2850.4048       2828.643
+      3289.9615      2830.3948      2813.4902      2812.1143      2810.7473
+      3253.7393        2793.37      2790.6665      2789.2434      2789.8645
+      ...
+    """
+
+    if mfile.memstream:
+        mfile.file.seek(0)
+        buf = mfile.file.read().decode()
+    else:
+        with open(mfile.file) as fhandle:
+            buf = fhandle.read()
+
+    # read line by line in the ascii ile, but skip line with '!'
+
+    args = {}
+    lines = iter(buf.splitlines())
+    undef = -9999999.0  # default undefined value, used in GXF files
+    nbuf = 0
+    data_section = False
+    data = []
+    for line in lines:
+        nbuf += 1
+        if data_section:
+            # we are in the data section, so read the values
+            line = line.strip()
+            if not line:
+                continue
+            data.append(line)
+            continue
+
+        if line.startswith("!"):
+            key = ""
+            continue
+        if line.startswith("##"):
+            key = ""
+            continue
+        if line.startswith("#"):
+            # read the key and then the next line, after stripping away quotes"
+            key = line[1:].strip().upper()
+        if key == "GRID":
+            data_section = True
+            continue  # skip the grid line, we read data below
+        if key == "POINTS":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["ncol"] = int(next_line)
+        elif key == "ROWS":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["nrow"] = int(next_line)
+        elif key == "PTSEPARATION":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["xinc"] = float(next_line)
+        elif key == "RWSEPARATION":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["yinc"] = float(next_line)
+        elif key == "XORIGIN":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["xori"] = float(next_line)
+        elif key == "YORIGIN":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            args["yori"] = float(next_line)
+        elif key == "ROTATION":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            rot = float(next_line)
+            if rot != 0.0:
+                args["rotation"] = -1 * (90 - rot)
+        elif key == "DUMMY":
+            next_line = next(lines, None)
+            nbuf += 1
+            next_line = next_line.strip().strip('"')
+            undef = float(next_line)
+
+    if not args.get("xinc"):
+        args["xinc"] = 1.0
+    if not args.get("yinc"):
+        args["yinc"] = 1.0
+
+    args["yflip"] = 1
+    if args["yinc"] < 0.0:
+        args["yinc"] *= -1
+        args["yflip"] = -1
+
+    print("NB POSITION:", nbuf)
+
+    nvalues = args["nrow"] * args["ncol"]
+    data = " ".join(data)
+    data = data.replace("\n", " ").replace("\r", " ")
+    values = np.fromstring(data, dtype=np.float64, sep=" ")
+    print(values)
+
+    if values.size != nvalues:
+        raise ValueError(
+            f"Expected {nvalues} values, but got {values.size} line: {buf[nbuf]!r}"
+        )
+
+    values = np.reshape(values, (args["ncol"], args["nrow"]), order="F")
+    values = np.array(values)
+    # args["rotation"] = 0.0
+    # revert columns to make it right handed
+    # values = np.flipud(values)
+    args["values"] = np.ma.masked_equal(values, undef)
+
+    del buf
+    return args
+
+
 def import_ijxyz(
     mfile: FileWrapper,
     template: RegularSurface | Cube | None = None,

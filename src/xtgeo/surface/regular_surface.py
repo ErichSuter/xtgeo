@@ -500,6 +500,8 @@ def _data_reader_factory(file_format: FileFormat):
         return _regsurf_import.import_xtg
     if file_format == FileFormat.HDF:
         return _regsurf_import.import_hdf5_regsurf
+    if file_format == FileFormat.GXF:
+        return _regsurf_import.import_gxf_ascii
 
     extensions = FileFormat.extensions_string(
         [

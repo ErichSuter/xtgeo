@@ -97,6 +97,7 @@ class FileFormat(Enum):
     RMS_ATTR = ["rms_attr", "rms_attrs", "rmsattr.*"]
     CSV = ["csv", "csv.*"]
     PARQUET = ["parquet", "parquet.*", "pq"]
+    GXF = ["gxf", "gxf.*"]
     UNKNOWN = ["unknown"]
 
     @staticmethod
