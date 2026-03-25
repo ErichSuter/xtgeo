@@ -1,9 +1,18 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 from osgeo import gdal
 
 # Open the GXF file
-gxf_file = "path/to/your_file.gxf"
+print(os.getcwd())
+gdal.UseExceptions()
+#gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_minimum.gxf"         # OK
+gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_minimum_misc_testing.gxf"         # OK
+# gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test.gxf"            # NOK
+# gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test_no_header.gxf"  # NOK
+# gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test_no_apostrophes.gxf" # NOK
+# gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test_no_header_no_apostrophes.gxf" # OK
 dataset = gdal.Open(gxf_file)
 
 if dataset is not None:
@@ -27,9 +36,16 @@ if dataset is not None:
         # Replace no-data values with NaN for visualization
         data = np.where(data == nodata, np.nan, data)
 
+
+    metadata = dataset.GetMetadata()  # Get metadata to check for header info
+
+
     # Now you can work with the data array
     print(f"Data shape: {data.shape}")
     print(f"Data min: {np.nanmin(data)}, max: {np.nanmax(data)}")
+    print(f"Geotransform: {geotransform}")
+    print(f"Projection: {projection}")
+    print(f"Metadata: {metadata}")
 
     # Simple visualization
     plt.imshow(data, cmap="viridis")
