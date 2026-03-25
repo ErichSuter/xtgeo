@@ -53,6 +53,12 @@ if dataset is not None:
     plt.title(f"GXF data from {gxf_file}")
     plt.show()
 
+
+    # TODO:
+    # GetNextFeature()
+    # FlushCache(self, *args): write to disk
+
+
     # Clean up
     dataset = None
 else:

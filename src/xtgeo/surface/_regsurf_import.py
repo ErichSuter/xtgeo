@@ -303,6 +303,82 @@ def import_gxf_ascii(mfile: FileWrapper, **_):
     del buf
     return args
 
+def import_gxf_ascii_GDAL(mfile: FileWrapper, **_):
+    """
+    Import GXF format, as seen in e.g. OW.
+    The GXF format is a simple ascii format with a header and values.
+    See https://pubs.usgs.gov/of/1999/of99-514/grids/gxf.pdf
+
+    We use the GDAL library to read the GXF file.
+    """
+
+    if mfile.memstream:
+        raise NotImplementedError("Not implemented.")
+        # TODO: can we use GDAL for this? Maybe write to file first ... ?
+        # mfile.file.seek(0)
+        # buf = mfile.file.read().decode()
+
+    from osgeo import gdal
+
+    gdal.UseExceptions()
+    # gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_minimum_misc_testing.gxf"
+    with gdal.Open(mfile.file) as dataset:
+        # Get dimensions
+        width = dataset.RasterXSize
+        height = dataset.RasterYSize
+
+        # Get geotransform (affine transformation coefficients)
+        geotransform = dataset.GetGeoTransform()
+
+        # Get projection
+        projection = dataset.GetProjection()
+
+        # Read the data into a numpy array
+        band = dataset.GetRasterBand(1)  # GXF typically has one band
+        data = band.ReadAsArray()
+
+        # Get no-data value if it exists
+        nodata = band.GetNoDataValue()
+        if nodata is not None:
+            # Replace no-data values with NaN for visualization
+            data = np.where(data == nodata, np.nan, data)
+
+
+        metadata = dataset.GetMetadata()  # Get metadata to check for header info
+
+
+        # Now you can work with the data array
+        print(f"Data shape: {data.shape}")
+        print(f"Data min: {np.nanmin(data)}, max: {np.nanmax(data)}")
+        print(f"Geotransform: {geotransform}")
+        print(f"Projection: {projection}")
+        print(f"Metadata: {metadata}")
+
+        # Simple visualization
+        plt.imshow(data, cmap="viridis")
+        plt.colorbar()
+        plt.title(f"GXF data from {mfile.file}")
+        plt.show()
+
+
+    # CoPilot suggestion:
+    # ds = gdal.Open(mfile.file)
+    # band = ds.GetRasterBand(1)
+    # values = band.ReadAsArray()
+    # gt = ds.GetGeoTransform()
+    # args = {
+    #     "ncol": ds.RasterXSize,
+    #     "nrow": ds.RasterYSize,
+    #     "xori": gt[0],
+    #     "yori": gt[3],
+    #     "xinc": gt[1],
+    #     "yinc": gt[5],
+    #     "values": np.ma.masked_equal(values, UNDEF),
+    # }
+    # return args
+
+
+
 
 def import_ijxyz(
     mfile: FileWrapper,
