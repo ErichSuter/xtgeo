@@ -1,6 +1,12 @@
 """GXF file parser/writer for regular surfaces.
 
-The implementation handles a strict subset of the GXF format. Supported keys are:
+GXF (Grid eXchange Format) is a simple ASCII format for regular grid data.
+This module provides functionality to read and write a subset of the GXF format,
+only a subset of the keys are supported.
+
+Documentation: https://pubs.usgs.gov/of/1999/of99-514/grids/gxf.pdf
+
+Supported keys are:
 
 - #POINTS
 - #ROWS
@@ -12,6 +18,9 @@ The implementation handles a strict subset of the GXF format. Supported keys are
 - #DUMMY
 - #GRID
 
+# TODO: check this, then delete comment
+#GRID contains values in row-major order (rows of length ncol), but XTGeo's internal regular surface representation is (ncol, nrow), therefore a transpose is applied on read/write.
+
 Lines starting with ``!`` are comments and ignored. Lines that do not start with
 ``#`` are considered free text and ignored (outside the ``#GRID`` section).
 
@@ -22,7 +31,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypedDict, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -59,6 +68,15 @@ class GXFDict(TypedDict):
 @dataclass(frozen=True)
 class GXFData:
     """Internal immutable data representation for a regular surface in GXF format."""
+
+    # GXF spec default values for optional keys.
+    DEFAULTS: ClassVar[dict[str, float]] = {
+        "PTSEPARATION": 1.0,
+        "RWSEPARATION": 1.0,
+        "XORIGIN": 0.0,
+        "YORIGIN": 0.0,
+        "ROTATION": 0.0,
+    }
 
     ncol: int
     nrow: int
@@ -232,25 +250,39 @@ class GXFData:
             scalar_values[key] = parsed_value
             i += 1
 
-        mandatory = [
-            "POINTS",
-            "ROWS",
-            "PTSEPARATION",
-            "RWSEPARATION",
-            "XORIGIN",
-            "YORIGIN",
-            "ROTATION",
-            "DUMMY",
-        ]
-        missing = [key for key in mandatory if key not in scalar_values]
-        if missing:
+        # Only #POINTS, #ROWS and #GRID are required per the GXF spec.
+        # Other keys have defaults; warn when a default is used.
+        required = ["POINTS", "ROWS"]
+        missing_required = [k for k in required if k not in scalar_values]
+        if missing_required:
             raise ValueError(
-                f"In file {fileref_errmsg}: Missing mandatory keys: {missing}."
+                f"In file {fileref_errmsg}: Missing mandatory keys: "
+                f"{missing_required}."
             )
 
         if not grid_found:
             raise ValueError(
                 f"In file {fileref_errmsg}: Missing mandatory key '#GRID'."
+            )
+
+        # Apply spec defaults and warn for each.
+        for dkey, dval in cls.DEFAULTS.items():
+            if dkey not in scalar_values:
+                scalar_values[dkey] = dval
+                warnings.warn(
+                    f"In file {fileref_errmsg}: Key '#{dkey}' not found, "
+                    f"using default value {dval}.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+
+        has_dummy = "DUMMY" in scalar_values
+        if not has_dummy:
+            warnings.warn(
+                f"In file {fileref_errmsg}: Key '#DUMMY' not found, "
+                "all grid values will be treated as valid.",
+                UserWarning,
+                stacklevel=3,
             )
 
         ncol = int(scalar_values["POINTS"])
@@ -266,7 +298,13 @@ class GXFData:
         # GXF grid values are read as rows of length ncol. XTGeo stores regular
         # surfaces as (ncol, nrow), therefore transpose from (nrow, ncol).
         values_2d = np.array(grid_values, dtype=np.float64).reshape((nrow, ncol)).T
-        masked_values = np.ma.masked_equal(values_2d, float(scalar_values["DUMMY"]))
+
+        if has_dummy:
+            dummy_val = float(scalar_values["DUMMY"])
+            masked_values = np.ma.masked_equal(values_2d, dummy_val)
+        else:
+            dummy_val = 1e33  # internal sentinel; no actual masking
+            masked_values = np.ma.array(values_2d)
 
         return cls(
             ncol=ncol,
@@ -276,7 +314,7 @@ class GXFData:
             xori=float(scalar_values["XORIGIN"]),
             yori=float(scalar_values["YORIGIN"]),
             rotation=float(scalar_values["ROTATION"]),
-            dummy=float(scalar_values["DUMMY"]),
+            dummy=dummy_val,
             values=masked_values,
         )
 

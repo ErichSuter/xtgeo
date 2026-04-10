@@ -112,6 +112,7 @@ def test_grid_value_count_must_match_ncol_times_nrow(count: int) -> None:
 
 
 def test_missing_mandatory_key_raises() -> None:
+    """Missing #ROWS (a truly required key) must raise."""
     content = """
 #POINTS
 "3"
@@ -133,6 +134,68 @@ def test_missing_mandatory_key_raises() -> None:
 
     with pytest.raises(ValueError, match="Missing mandatory keys"):
         GXFData.from_file(gxf_stream(content))
+
+
+def test_optional_keys_default_with_warnings() -> None:
+    """When optional keys are missing, defaults are applied with warnings."""
+    content = """
+#POINTS
+"3"
+#ROWS
+"2"
+#GRID
+1 2 3 4 5 6
+"""
+
+    with pytest.warns(UserWarning) as recorded:
+        result = GXFData.from_file(gxf_stream(content))
+
+    msgs = [str(w.message) for w in recorded]
+    assert any("#PTSEPARATION" in m and "default" in m for m in msgs)
+    assert any("#RWSEPARATION" in m and "default" in m for m in msgs)
+    assert any("#XORIGIN" in m and "default" in m for m in msgs)
+    assert any("#YORIGIN" in m and "default" in m for m in msgs)
+    assert any("#ROTATION" in m and "default" in m for m in msgs)
+    assert any("#DUMMY" in m for m in msgs)
+
+    assert result.ncol == 3
+    assert result.nrow == 2
+    assert result.xinc == pytest.approx(1.0)
+    assert result.yinc == pytest.approx(1.0)
+    assert result.xori == pytest.approx(0.0)
+    assert result.yori == pytest.approx(0.0)
+    assert result.rotation == pytest.approx(0.0)
+
+    # All 6 values should be present and valid, no masking due to missing #DUMMY
+    assert result.values.count() == 6
+
+
+def test_no_dummy_means_no_masking() -> None:
+    """Without #DUMMY, no values should be masked."""
+    content = """
+#POINTS
+"2"
+#ROWS
+"2"
+#PTSEPARATION
+"1"
+#RWSEPARATION
+"1"
+#XORIGIN
+"0"
+#YORIGIN
+"0"
+#ROTATION
+"0"
+#GRID
+1 2 3 4
+"""
+
+    with pytest.warns(UserWarning, match="#DUMMY"):
+        result = GXFData.from_file(gxf_stream(content))
+
+    assert result.values.count() == 4
+    assert not np.any(result.values.mask)
 
 
 def test_unknown_single_hash_key_warns_and_skips() -> None:
