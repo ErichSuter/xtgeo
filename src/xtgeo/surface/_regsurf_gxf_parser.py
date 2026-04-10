@@ -70,6 +70,7 @@ class GXFData:
     dummy: float
     values: np.ma.MaskedArray
 
+
     def __post_init__(self) -> None:
         values = np.ma.array(self.values, dtype=np.float64, copy=True)
 
@@ -91,6 +92,7 @@ class GXFData:
 
         object.__setattr__(self, "values", values)
 
+
     @staticmethod
     def _strip_optional_quotes(value: str) -> str:
         stripped = value.strip()
@@ -98,8 +100,11 @@ class GXFData:
             return stripped[1:-1]
         return stripped
 
+
     @staticmethod
-    def _next_value_line(lines: list[str], start_index: int, fileref_errmsg: str) -> int:
+    def _next_value_line(
+        lines: list[str], start_index: int, fileref_errmsg: str
+    ) -> int:
         """Find the next non-empty line index used as a value line."""
         idx = start_index
         while idx < len(lines) and lines[idx].strip() == "":
@@ -110,11 +115,13 @@ class GXFData:
 
         return idx
 
+
     @staticmethod
     def _format_number(value: float | int) -> str:
         if isinstance(value, int):
             return str(value)
         return f"{value:.16g}"
+
 
     @classmethod
     def _parse_gxf(cls, text: str, fileref_errmsg: str) -> Self:
@@ -190,11 +197,15 @@ class GXFData:
                 break
 
             if key not in scalar_keys:
-                supported = sorted(scalar_keys | {"GRID"})
-                raise ValueError(
-                    f"In file {fileref_errmsg}: Unsupported key '#{key}'. "
-                    f"Supported keys are: {supported}."
+                i = cls._next_value_line(lines, i + 1, fileref_errmsg)
+                warnings.warn(
+                    f"In file {fileref_errmsg}: Ignoring unsupported "
+                    f"key '#{key}'.",
+                    UserWarning,
+                    stacklevel=3,
                 )
+                i += 1
+                continue
 
             if key in scalar_values:
                 raise ValueError(
@@ -238,7 +249,9 @@ class GXFData:
             )
 
         if not grid_found:
-            raise ValueError(f"In file {fileref_errmsg}: Missing mandatory key '#GRID'.")
+            raise ValueError(
+                f"In file {fileref_errmsg}: Missing mandatory key '#GRID'."
+            )
 
         ncol = int(scalar_values["POINTS"])
         nrow = int(scalar_values["ROWS"])
@@ -267,6 +280,7 @@ class GXFData:
             values=masked_values,
         )
 
+
     @classmethod
     def from_file(
         cls,
@@ -288,6 +302,7 @@ class GXFData:
 
         with wrapped_file.get_text_stream_read(encoding=encoding) as stream:
             return cls._parse_gxf(stream.read(), fileref_errmsg=str(wrapped_file.name))
+
 
     def to_file(
         self,
@@ -331,10 +346,23 @@ class GXFData:
             stream.write("#GRID\n")
 
             # Write rows of ncol values from internal (ncol, nrow) representation.
+            # GXF spec requires lines <= 80 chars; rows may wrap but each new
+            # row must start on a new line.
+            max_line_length = 80
             values_for_write = np.ma.filled(self.values, fill_value=self.dummy).T
             for row in values_for_write:
-                line = " ".join(self._format_number(float(value)) for value in row)
-                stream.write(f"{line}\n")
+                tokens = [self._format_number(float(v)) for v in row]
+                current_line = ""
+                for token in tokens:
+                    candidate = (current_line + " " + token) if current_line else token
+                    if len(candidate) > max_line_length and current_line:
+                        stream.write(current_line + "\n")
+                        current_line = token
+                    else:
+                        current_line = candidate
+                if current_line:
+                    stream.write(current_line + "\n")
+
 
     def to_dict(self) -> GXFDict:
         """Return a dictionary representation of the GXFData object."""
@@ -352,6 +380,7 @@ class GXFData:
                 np.ma.filled(self.values, fill_value=self.dummy), copy=True
             ),
         )
+
 
     @classmethod
     def from_dict(cls, data: GXFDict) -> Self:

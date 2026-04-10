@@ -135,7 +135,7 @@ def test_missing_mandatory_key_raises() -> None:
         GXFData.from_file(gxf_stream(content))
 
 
-def test_unknown_single_hash_key_raises() -> None:
+def test_unknown_single_hash_key_warns_and_skips() -> None:
     content = """
 #POINTS
 "3"
@@ -159,8 +159,11 @@ def test_unknown_single_hash_key_raises() -> None:
 1 2 3 4 5 6
 """
 
-    with pytest.raises(ValueError, match="Unsupported key"):
-        GXFData.from_file(gxf_stream(content))
+    with pytest.warns(UserWarning, match="#UNKNOWN_KEY"):
+        result = GXFData.from_file(gxf_stream(content))
+
+    assert result.ncol == 3
+    assert result.nrow == 2
 
 
 def test_duplicate_key_raises() -> None:
@@ -251,7 +254,9 @@ def test_to_file_and_from_file_roundtrip_stringio() -> None:
 
 
 def test_to_file_and_from_file_roundtrip_bytesio() -> None:
-    values = np.ma.array([[1.0, 2.0], [3.0, 9999.0]], mask=[[False, False], [False, True]])
+    values = np.ma.array(
+        [[1.0, 2.0], [3.0, 9999.0]], mask=[[False, False], [False, True]]
+    )
     gxf = GXFData(
         ncol=2,
         nrow=2,
@@ -317,6 +322,61 @@ def test_from_dict_missing_key_raises() -> None:
         )
 
 
+def test_writer_line_length_at_most_80_chars() -> None:
+    """GXF spec requires all lines <= 80 characters."""
+    ncol = 20
+    nrow = 3
+    values = np.ma.arange(ncol * nrow, dtype=np.float64).reshape((ncol, nrow))
+    gxf = GXFData(
+        ncol=ncol,
+        nrow=nrow,
+        xinc=1.0,
+        yinc=1.0,
+        xori=0.0,
+        yori=0.0,
+        rotation=0.0,
+        dummy=-999.0,
+        values=values,
+    )
+
+    stream = StringIO()
+    gxf.to_file(stream)
+    stream.seek(0)
+    for line in stream:
+        assert len(line.rstrip("\n")) <= 80
+
+    stream.seek(0)
+    re_read = GXFData.from_file(stream)
+    np.testing.assert_allclose(re_read.values.data, gxf.values.data)
+
+
+def test_writer_roundtrip_wide_grid() -> None:
+    """Roundtrip a grid wide enough to require line wrapping."""
+    ncol = 40
+    nrow = 2
+    values = np.ma.arange(ncol * nrow, dtype=np.float64).reshape((ncol, nrow))
+    gxf = GXFData(
+        ncol=ncol,
+        nrow=nrow,
+        xinc=1.0,
+        yinc=1.0,
+        xori=0.0,
+        yori=0.0,
+        rotation=0.0,
+        dummy=-999.0,
+        values=values,
+    )
+
+    stream = StringIO()
+    gxf.to_file(stream)
+    stream.seek(0)
+
+    re_read = GXFData.from_file(stream)
+    assert re_read.ncol == ncol
+    assert re_read.nrow == nrow
+    np.testing.assert_allclose(re_read.values.data, gxf.values.data)
+
+
 def test_frozen_dataclass() -> None:
     gxf = GXFData(
         ncol=2,
@@ -347,7 +407,9 @@ def test_regular_surface_from_file_gxf_integration(valid_gxf_content: str) -> No
     assert surf.rotation == pytest.approx(12.5)
 
     expected_data = np.array([[1.0, 4.0], [2.0, np.nan], [3.0, 6.0]])
-    np.testing.assert_allclose(surf.values.filled(np.nan), expected_data, equal_nan=True)
+    np.testing.assert_allclose(
+        surf.values.filled(np.nan), expected_data, equal_nan=True
+    )
 
 
 def test_regular_surface_to_file_gxf_integration_roundtrip() -> None:
