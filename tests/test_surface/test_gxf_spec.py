@@ -538,3 +538,33 @@ def test_regular_surface_guess_format_by_extension(tmp_path) -> None:
     surf = xtgeo.surface_from_file(path)
     assert surf.ncol == 2
     assert surf.nrow == 2
+
+
+def test_sense_key_warns_about_orientation() -> None:
+    """#SENSE key should produce a specific orientation warning."""
+    content = """
+#POINTS
+"2"
+#ROWS
+"2"
+#PTSEPARATION
+"1"
+#RWSEPARATION
+"1"
+#XORIGIN
+"0"
+#YORIGIN
+"0"
+#ROTATION
+"0"
+#DUMMY
+"999"
+#SENSE
+"1"
+#GRID
+1 2 3 4
+"""
+    with pytest.warns(UserWarning, match="SENSE.*orientation"):
+        result = GXFData.from_file(gxf_stream(content))
+
+    assert result.ncol == 2

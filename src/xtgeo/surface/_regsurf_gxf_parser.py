@@ -214,6 +214,24 @@ class GXFData:
 
                 break
 
+            if key == "SENSE":
+                # SENSE controls both the orientation
+                # of the grid and right-handedness/left-handedness
+                # of the coordinate system.
+                # The current implementation does not take this parameter
+                # into account.
+                i = cls._next_value_line(lines, i + 1, fileref_errmsg)
+                warnings.warn(
+                    f"In file {fileref_errmsg}: Ignoring '#SENSE' key. "
+                    "This key may affect grid orientation but is not "
+                    "supported; verify that the surface orientation "
+                    "and handedness is correct.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+                i += 1
+                continue
+
             if key not in scalar_keys:
                 i = cls._next_value_line(lines, i + 1, fileref_errmsg)
                 warnings.warn(
@@ -303,6 +321,7 @@ class GXFData:
             dummy_val = float(scalar_values["DUMMY"])
             masked_values = np.ma.masked_equal(values_2d, dummy_val)
         else:
+            # TODO: use default value (what is an internal sentinel?)
             dummy_val = 1e33  # internal sentinel; no actual masking
             masked_values = np.ma.array(values_2d)
 
@@ -367,7 +386,7 @@ class GXFData:
             stream.write(f'"{self._format_number(self.xinc)}"\n')
 
             stream.write("#RWSEPARATION\n")
-            stream.write(f'"{self._format_number(self.yinc)}"\n')
+            stream.write(f'"{ self._format_number(self.yinc)}"\n')
 
             stream.write("#XORIGIN\n")
             stream.write(f'"{self._format_number(self.xori)}"\n')
