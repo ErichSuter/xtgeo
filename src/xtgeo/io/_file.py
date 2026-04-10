@@ -23,7 +23,7 @@ from typing import (
 
 from typing_extensions import Self
 
-import xtgeo._cxtgeo
+import xtgeo._cxtgeo  # pyright: ignore[reportMissingImports]
 from xtgeo.common.exceptions import InvalidFileFormatError
 from xtgeo.common.log import null_logger
 
@@ -656,13 +656,18 @@ class FileWrapper:
                 return FileFormat.TSURF
 
         # GXF regular surface format
+        # No specific signature line, so we look for some indicative keys
+        gxf_indicator_keys = {"#POINTS", "#ROWS"}
+        num_keys_found = 0
         for line in xbuf:
             stripped = line.strip()
-            if not stripped or stripped.startswith("!"):
+            if not stripped or stripped.startswith(("!", "##")):
                 continue
-            if stripped.upper() == "#POINTS":
-                logger.debug("Signature is gxf")
-                return FileFormat.GXF
+            if stripped.upper() in gxf_indicator_keys:
+                num_keys_found += 1
+                if num_keys_found == len(gxf_indicator_keys):
+                    logger.debug("Signature is gxf")
+                    return FileFormat.GXF
 
         return FileFormat.UNKNOWN
 

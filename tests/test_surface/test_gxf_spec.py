@@ -45,8 +45,12 @@ Some free text to ignore
 
 
 def test_from_file_valid_with_extension_keys(valid_gxf_content: str) -> None:
-    with pytest.warns(UserWarning, match="##XMAX"):
+    with pytest.warns(UserWarning) as recorded:
         result = GXFData.from_file(gxf_stream(valid_gxf_content))
+
+    warning_messages = [str(w.message) for w in recorded]
+    assert any("##XMAX" in message for message in warning_messages)
+    assert any("##YMAX" in message for message in warning_messages)
 
     assert result.ncol == 3
     assert result.nrow == 2
@@ -149,7 +153,7 @@ def test_unknown_single_hash_key_raises() -> None:
 "0"
 #DUMMY
 "999"
-#UNKNOWN
+#UNKNOWN_KEY
 "17"
 #GRID
 1 2 3 4 5 6
@@ -232,18 +236,18 @@ def test_to_file_and_from_file_roundtrip_stringio() -> None:
     gxf.to_file(stream)
     stream.seek(0)
 
-    reread = GXFData.from_file(stream)
+    re_read = GXFData.from_file(stream)
 
-    assert reread.ncol == gxf.ncol
-    assert reread.nrow == gxf.nrow
-    assert reread.xinc == pytest.approx(gxf.xinc)
-    assert reread.yinc == pytest.approx(gxf.yinc)
-    assert reread.xori == pytest.approx(gxf.xori)
-    assert reread.yori == pytest.approx(gxf.yori)
-    assert reread.rotation == pytest.approx(gxf.rotation)
-    assert reread.dummy == pytest.approx(gxf.dummy)
-    np.testing.assert_allclose(reread.values.data, gxf.values.data)
-    np.testing.assert_array_equal(reread.values.mask, gxf.values.mask)
+    assert re_read.ncol == gxf.ncol
+    assert re_read.nrow == gxf.nrow
+    assert re_read.xinc == pytest.approx(gxf.xinc)
+    assert re_read.yinc == pytest.approx(gxf.yinc)
+    assert re_read.xori == pytest.approx(gxf.xori)
+    assert re_read.yori == pytest.approx(gxf.yori)
+    assert re_read.rotation == pytest.approx(gxf.rotation)
+    assert re_read.dummy == pytest.approx(gxf.dummy)
+    np.testing.assert_allclose(re_read.values.data, gxf.values.data)
+    np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
 
 
 def test_to_file_and_from_file_roundtrip_bytesio() -> None:
@@ -264,10 +268,10 @@ def test_to_file_and_from_file_roundtrip_bytesio() -> None:
     gxf.to_file(stream)
     stream.seek(0)
 
-    reread = GXFData.from_file(stream)
+    re_read = GXFData.from_file(stream)
 
-    np.testing.assert_allclose(reread.values.data, gxf.values.data)
-    np.testing.assert_array_equal(reread.values.mask, gxf.values.mask)
+    np.testing.assert_allclose(re_read.values.data, gxf.values.data)
+    np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
 
 
 def test_dict_roundtrip() -> None:
@@ -288,13 +292,13 @@ def test_dict_roundtrip() -> None:
     )
 
     as_dict = gxf.to_dict()
-    reread = GXFData.from_dict(as_dict)
+    re_read = GXFData.from_dict(as_dict)
 
-    assert reread.ncol == gxf.ncol
-    assert reread.nrow == gxf.nrow
-    assert reread.rotation == pytest.approx(gxf.rotation)
-    np.testing.assert_allclose(reread.values.data, gxf.values.data)
-    np.testing.assert_array_equal(reread.values.mask, gxf.values.mask)
+    assert re_read.ncol == gxf.ncol
+    assert re_read.nrow == gxf.nrow
+    assert re_read.rotation == pytest.approx(gxf.rotation)
+    np.testing.assert_allclose(re_read.values.data, gxf.values.data)
+    np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
 
 
 def test_from_dict_missing_key_raises() -> None:
@@ -366,18 +370,18 @@ def test_regular_surface_to_file_gxf_integration_roundtrip() -> None:
     surf.to_file(stream, fformat="gxf")
     stream.seek(0)
 
-    reread = xtgeo.surface_from_file(stream, fformat="gxf")
+    re_read = xtgeo.surface_from_file(stream, fformat="gxf")
 
-    assert reread.ncol == surf.ncol
-    assert reread.nrow == surf.nrow
-    assert reread.xinc == pytest.approx(surf.xinc)
-    assert reread.yinc == pytest.approx(surf.yinc)
-    assert reread.xori == pytest.approx(surf.xori)
-    assert reread.yori == pytest.approx(surf.yori)
-    assert reread.rotation == pytest.approx(surf.rotation)
+    assert re_read.ncol == surf.ncol
+    assert re_read.nrow == surf.nrow
+    assert re_read.xinc == pytest.approx(surf.xinc)
+    assert re_read.yinc == pytest.approx(surf.yinc)
+    assert re_read.xori == pytest.approx(surf.xori)
+    assert re_read.yori == pytest.approx(surf.yori)
+    assert re_read.rotation == pytest.approx(surf.rotation)
 
     np.testing.assert_allclose(
-        reread.values.filled(np.nan), surf.values.filled(np.nan), equal_nan=True
+        re_read.values.filled(np.nan), surf.values.filled(np.nan), equal_nan=True
     )
 
 
