@@ -29,6 +29,7 @@ Keys prefixed with ``##`` are treated as extension keys and ignored with a warni
 
 from __future__ import annotations
 
+import logging
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, TypedDict, TypeVar
@@ -51,6 +52,8 @@ from xtgeo.io._file import FileFormat, FileWrapper
 
 if TYPE_CHECKING:
     from xtgeo.common.types import FileLike
+
+logger = logging.getLogger(__name__)
 
 
 @closed
@@ -177,12 +180,12 @@ class GXFData:
             if stripped.startswith("##"):
                 ext_key = stripped[2:].strip() or "<EMPTY>"
                 i = cls._next_value_line(lines, i + 1, fileref_errmsg)
-                warnings.warn(
+                msg = (
                     f"In file {fileref_errmsg}: Ignoring unsupported extension "
-                    f"key '##{ext_key}'.",
-                    UserWarning,
-                    stacklevel=3,
+                    f"key '##{ext_key}'."
                 )
+                logger.warning(msg)
+                warnings.warn(msg, UserWarning, stacklevel=3)
                 i += 1
                 continue
 
@@ -222,25 +225,25 @@ class GXFData:
                 # The current implementation does not take this parameter
                 # into account.
                 i = cls._next_value_line(lines, i + 1, fileref_errmsg)
-                warnings.warn(
+                msg = (
                     f"In file {fileref_errmsg}: Ignoring '#SENSE' key. "
                     "This key may affect grid orientation but is not "
                     "supported; verify that the surface orientation "
-                    "and handedness is correct.",
-                    UserWarning,
-                    stacklevel=3,
+                    "and handedness is correct."
                 )
+                logger.warning(msg)
+                warnings.warn(msg, UserWarning, stacklevel=3)
                 i += 1
                 continue
 
             if key not in scalar_keys:
                 i = cls._next_value_line(lines, i + 1, fileref_errmsg)
-                warnings.warn(
+                msg = (
                     f"In file {fileref_errmsg}: Ignoring unsupported "
-                    f"key '#{key}'.",
-                    UserWarning,
-                    stacklevel=3,
+                    f"key '#{key}'."
                 )
+                logger.warning(msg)
+                warnings.warn(msg, UserWarning, stacklevel=3)
                 i += 1
                 continue
 
@@ -288,21 +291,21 @@ class GXFData:
         for dkey, dval in cls.DEFAULTS.items():
             if dkey not in scalar_values:
                 scalar_values[dkey] = dval
-                warnings.warn(
+                msg = (
                     f"In file {fileref_errmsg}: Key '#{dkey}' not found, "
-                    f"using default value {dval}.",
-                    UserWarning,
-                    stacklevel=3,
+                    f"using default value {dval}."
                 )
+                logger.warning(msg)
+                warnings.warn(msg, UserWarning, stacklevel=3)
 
         has_dummy = "DUMMY" in scalar_values
         if not has_dummy:
-            warnings.warn(
+            msg = (
                 f"In file {fileref_errmsg}: Key '#DUMMY' not found, "
-                "all grid values will be treated as valid.",
-                UserWarning,
-                stacklevel=3,
+                "all grid values will be treated as valid."
             )
+            logger.warning(msg)
+            warnings.warn(msg, UserWarning, stacklevel=3)
 
         ncol = int(scalar_values["POINTS"])
         nrow = int(scalar_values["ROWS"])
