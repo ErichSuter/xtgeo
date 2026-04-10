@@ -46,7 +46,8 @@ except ImportError:
         return cls
 
 
-from xtgeo.io._file import FileWrapper
+from xtgeo.common.exceptions import InvalidFileFormatError
+from xtgeo.io._file import FileFormat, FileWrapper
 
 if TYPE_CHECKING:
     from xtgeo.common.types import FileLike
@@ -354,8 +355,9 @@ class GXFData:
         wrapped_file = FileWrapper(file)
         if not wrapped_file.check_file():
             raise FileNotFoundError(
-                f"In file {wrapped_file.name}: The file does not exist."
+                f"\nIn file {wrapped_file.name}:\nThe file does not exist."
             )
+        wrapped_file.fileformat(FileFormat.GXF.value[0], strict=True)
 
         with wrapped_file.get_text_stream_read(encoding=encoding) as stream:
             return cls._parse_gxf(stream.read(), fileref_errmsg=str(wrapped_file.name))

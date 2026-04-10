@@ -112,10 +112,12 @@ def test_grid_value_count_must_match_ncol_times_nrow(count: int) -> None:
 
 
 def test_missing_mandatory_key_raises() -> None:
-    """Missing #ROWS (a truly required key) must raise."""
+    """Missing #GRID (a truly required key) must raise."""
     content = """
 #POINTS
 "3"
+#ROWS
+"2"
 #PTSEPARATION
 "1"
 #RWSEPARATION
@@ -128,11 +130,9 @@ def test_missing_mandatory_key_raises() -> None:
 "0"
 #DUMMY
 "999"
-#GRID
-1 2 3 4 5 6
 """
 
-    with pytest.raises(ValueError, match="Missing mandatory keys"):
+    with pytest.raises(ValueError, match="Missing mandatory key"):
         GXFData.from_file(gxf_stream(content))
 
 
@@ -568,3 +568,82 @@ def test_sense_key_warns_about_orientation() -> None:
         result = GXFData.from_file(gxf_stream(content))
 
     assert result.ncol == 2
+
+
+def test_file_format_verification_on_file_path(tmp_path) -> None:
+    """When reading from a .gxf file path, format verification should succeed."""
+    content = """#POINTS
+"2"
+#ROWS
+"2"
+#PTSEPARATION
+"1"
+#RWSEPARATION
+"1"
+#XORIGIN
+"0"
+#YORIGIN
+"0"
+#ROTATION
+"0"
+#DUMMY
+"999"
+#GRID
+1 2 3 4
+"""
+    path = tmp_path / "test.gxf"
+    path.write_text(content)
+
+    result = GXFData.from_file(path)
+    assert result.ncol == 2
+    assert result.nrow == 2
+
+
+def test_file_format_verification_on_non_gxf_content(tmp_path) -> None:
+    """
+    Format verification should fail for non-GXF content (missing #ROW).
+    Format verification checks for presence of some mandatory keys.
+    There is also a check for mandatory keys, but that comes afterwards and
+    will not be reached if format verification fails as expected.
+    """
+    content = """
+#POINTS
+"2"
+#PTSEPARATION
+"1"
+#RWSEPARATION
+"1"
+#XORIGIN
+"0"
+#YORIGIN
+"0"
+#ROTATION
+"0"
+#DUMMY
+"999"
+#GRID
+1 2 3 4
+"""
+    path = tmp_path / "test.gxf"
+    path.write_text(content)
+
+    with pytest.raises(
+        ValueError,
+        match="does not match format detected from file contents"
+    ):
+        GXFData.from_file(path)
+
+
+def test_file_format_verification_on_non_gxf_extension_and_content(tmp_path) -> None:
+    """When reading from a non-.gxf file path, format verification should fail."""
+    content ="""
+This is not a GXF key
+"""
+    path = tmp_path / "test.txt"
+    path.write_text(content)
+
+    with pytest.raises(
+        ValueError,
+        match="does not match format detected from file contents"
+    ):
+        GXFData.from_file(path)
