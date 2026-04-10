@@ -69,6 +69,30 @@ of these properties can be changed, which actually changes the map
    # Note that changing `nrow` and `ncol` is not possible to do directly.
 
 
+Import and export a GXF surface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+GXF is an ascii grid format used by some interpretation packages. XTGeo
+supports reading and writing the supported GXF subset directly through the
+regular surface API.
+
+.. code-block:: python
+
+   import xtgeo
+
+   # read from a GXF file; the format is guessed from the suffix
+   surf = xtgeo.surface_from_file("my_surface.gxf")
+
+   # modify values as for any other RegularSurface
+   surf.values = surf.values + 10.0
+
+   # write explicitly as GXF
+   surf.to_file("my_surface_shifted.gxf", fformat="gxf")
+
+   # explicit format is also useful when the file suffix is not .gxf
+   surf2 = xtgeo.surface_from_file("input_surface.dat", fformat="gxf")
+
+
 Sample a surface from a 3D grid
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

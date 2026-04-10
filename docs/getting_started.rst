@@ -51,6 +51,18 @@ importing and exporting the most common file formats.
 
     mysurface.to_file("newfile.gri")
 
+Regular surfaces can also be imported from and exported to GXF ascii files.
+When the file suffix is ``.gxf`` the format can be guessed automatically, or it
+can be given explicitly.
+
+.. code-block:: python
+
+    gxfsurf = xtgeo.surface_from_file("myfile.gxf")
+
+    gxfsurf = xtgeo.surface_from_file("myfile.dat", fformat="gxf")
+
+    gxfsurf.to_file("newfile.gxf", fformat="gxf")
+
 XTGeo has many more capabilities beyond basic value manipulation. For more, 
 check out the examples in the 
 :doc:`Tutorial section <tutorial/tutorial_index>`.

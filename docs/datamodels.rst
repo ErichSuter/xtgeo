@@ -71,6 +71,11 @@ RegularSurface supported import/export formats
      - Yes
      -
      - 5 columns: I, J, X, Y, Z
+   * - GXF ASCII
+     - Yes
+     - Yes
+     - Supports the XTGeo GXF subset
+     - Regular surface grid with header keys and ascii values
    * - ZMAP+ ASCII
      - No
      - Yes

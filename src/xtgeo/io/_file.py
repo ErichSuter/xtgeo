@@ -94,6 +94,7 @@ class FileFormat(Enum):
     XTG = ["xtg", "xtgeo", "xtgf", "xtgcpprop", "xtg.*"]
     XYZ = ["xyz", "poi", "pol"]
     TSURF = ["ts", "tsurf"]
+    GXF = ["gxf"]
     RMS_ATTR = ["rms_attr", "rms_attrs", "rmsattr.*"]
     CSV = ["csv", "csv.*"]
     PARQUET = ["parquet", "parquet.*", "pq"]
@@ -653,6 +654,15 @@ class FileWrapper:
             ):
                 logger.debug("Signature is tsurf")
                 return FileFormat.TSURF
+
+        # GXF regular surface format
+        for line in xbuf:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("!"):
+                continue
+            if stripped.upper() == "#POINTS":
+                logger.debug("Signature is gxf")
+                return FileFormat.GXF
 
         return FileFormat.UNKNOWN
 
