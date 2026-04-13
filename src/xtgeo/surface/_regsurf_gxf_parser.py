@@ -18,6 +18,31 @@ Supported keys are:
 - #DUMMY
 - #GRID
 
+Required keys are:
+- #POINTS
+- #ROWS
+- #GRID
+
+# TODO: ensure that the spec defaults are correct and update if needed
+Other keys have defaults per the GXF spec; when missing, the default is used and
+a warning is issued.
+
+The data represent a regular surface defined on a grid of ncol by nrow points,
+with specified spacing (xinc, yinc), origin (xori, yori), and rotation.
+The #GRID section contains values given at the grid nodes in row-major order
+(rows of length ncol).
+Undefined values at grid nodes are represented by a specified dummy value (#DUMMY);
+when a dummy value is provided, values equal to the dummy value are treated
+as masked/undefined. When no dummy value is provided, all values are treated as valid.
+The GXF specification says nothing about the physical meaning of the data in
+the #GRID section (elevation, rock property, etc.);
+it is up to the user to interpret these values.
+
+The parser will only pass on the values to the application, physical meaning is outside
+the scope of this module.
+Nevertheless, a typical use is to let the #GRID data represent surface elevation.
+
+
 # TODO: check this, then delete comment
 #GRID contains values in row-major order (rows of length ncol), but XTGeo's internal regular surface representation is (ncol, nrow), therefore a transpose is applied on read/write.
 
