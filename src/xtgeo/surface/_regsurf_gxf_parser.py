@@ -18,13 +18,12 @@ Supported keys are:
 - #DUMMY
 - #GRID
 
-Required keys are:
+Keys required by the GXF format are:
 - #POINTS
 - #ROWS
 - #GRID
 
-# TODO: ensure that the spec defaults are correct and update if needed
-Other keys have defaults per the GXF spec; when missing, the default is used and
+Optional keys have defaults per the GXF spec; when missing, the default is used and
 a warning is issued.
 
 The data represent a regular surface defined on a grid of ncol by nrow points,
@@ -45,6 +44,13 @@ Nevertheless, a typical use is to let the #GRID data represent surface elevation
 
 # TODO: check this, then delete comment
 #GRID contains values in row-major order (rows of length ncol), but XTGeo's internal regular surface representation is (ncol, nrow), therefore a transpose is applied on read/write.
+
+The #SENSE key controls both the orientation of the grid and
+right-handedness/left-handedness of the coordinate system, see the GFX documentation.
+The current implementation does not take this parameter into account.
+If the #SENSE key is present, a warning is issued to let the user know that
+the grid orientation and coordinate system handedness are handled in
+a default manner.
 
 Lines starting with ``!`` are comments and ignored. Lines that do not start with
 ``#`` are considered free text and ignored (outside the ``#GRID`` section).
@@ -72,7 +78,6 @@ except ImportError:
         return cls
 
 
-from xtgeo.common.exceptions import InvalidFileFormatError
 from xtgeo.io._file import FileFormat, FileWrapper
 
 if TYPE_CHECKING:
@@ -105,6 +110,7 @@ class GXFData:
         "XORIGIN": 0.0,
         "YORIGIN": 0.0,
         "ROTATION": 0.0,
+        "DUMMY": 1e30,      # TODO: see Jan's prototype for this default
     }
 
     ncol: int
@@ -123,7 +129,7 @@ class GXFData:
 
         if values.shape != (self.ncol, self.nrow):
             raise ValueError(
-                "Invalid surface values shape. "
+                "Invalid shape of surface values in the #GRID section. \n"
                 f"Expected {(self.ncol, self.nrow)}, got {values.shape}."
             )
 
@@ -243,6 +249,9 @@ class GXFData:
 
                 break
 
+            # TODO: could move the below into a validation function
+            # to be called after a parsing method
+
             if key == "SENSE":
                 # SENSE controls both the orientation
                 # of the grid and right-handedness/left-handedness
@@ -297,8 +306,7 @@ class GXFData:
             scalar_values[key] = parsed_value
             i += 1
 
-        # Only #POINTS, #ROWS and #GRID are required per the GXF spec.
-        # Other keys have defaults; warn when a default is used.
+        # Check for required keys
         required = ["POINTS", "ROWS"]
         missing_required = [k for k in required if k not in scalar_values]
         if missing_required:
@@ -307,12 +315,13 @@ class GXFData:
                 f"{missing_required}."
             )
 
+        # #GRID is also required
         if not grid_found:
             raise ValueError(
                 f"In file {fileref_errmsg}: Missing mandatory key '#GRID'."
             )
 
-        # Apply spec defaults and warn for each.
+        # Optional keys have defaults; warn when a default is used.
         for dkey, dval in cls.DEFAULTS.items():
             if dkey not in scalar_values:
                 scalar_values[dkey] = dval
@@ -323,30 +332,31 @@ class GXFData:
                 logger.warning(msg)
                 warnings.warn(msg, UserWarning, stacklevel=3)
 
-        has_dummy = "DUMMY" in scalar_values
-        if not has_dummy:
+        has_undefined_value = "DUMMY" in scalar_values
+        if not has_undefined_value:
             msg = (
                 f"In file {fileref_errmsg}: Key '#DUMMY' not found, "
-                "all grid values will be treated as valid."
+                "all grid values will be treated as valid (not undefined)."
             )
             logger.warning(msg)
             warnings.warn(msg, UserWarning, stacklevel=3)
 
         ncol = int(scalar_values["POINTS"])
         nrow = int(scalar_values["ROWS"])
-        expected_values = ncol * nrow
-        if len(grid_values) != expected_values:
+        num_expected_values = ncol * nrow
+        if len(grid_values) != num_expected_values:
             raise ValueError(
                 f"In file {fileref_errmsg}: Number of values in #GRID section "
-                f"is {len(grid_values)}, expected {expected_values} "
+                f"is {len(grid_values)}, expected {num_expected_values} "
                 f"(ncol*nrow = {ncol}*{nrow})."
             )
 
+        # TODO: verify this
         # GXF grid values are read as rows of length ncol. XTGeo stores regular
         # surfaces as (ncol, nrow), therefore transpose from (nrow, ncol).
         values_2d = np.array(grid_values, dtype=np.float64).reshape((nrow, ncol)).T
 
-        if has_dummy:
+        if has_undefined_value:
             dummy_val = float(scalar_values["DUMMY"])
             masked_values = np.ma.masked_equal(values_2d, dummy_val)
         else:
@@ -405,7 +415,11 @@ class GXFData:
 
         wrapped_file = FileWrapper(file)
 
+        # TODO: check if file already exists, if folder exists, etc.
+
+        # All handled keys are assumed to have values
         with wrapped_file.get_text_stream_write(encoding=encoding) as stream:
+            stream.write("! GXF file generated by xtgeo (https://github.com/equinor/xtgeo)\n\n")
             stream.write("#POINTS\n")
             stream.write(f'"{self._format_number(self.ncol)}"\n')
 
@@ -428,7 +442,7 @@ class GXFData:
             stream.write(f'"{self._format_number(self.rotation)}"\n')
 
             stream.write("#DUMMY\n")
-            stream.write(f'"{self._format_number(self.dummy)}"\n')
+            stream.write(f'"{self._format_number(self.dummy)}"\n\n')
 
             stream.write("#GRID\n")
 
@@ -436,6 +450,10 @@ class GXFData:
             # GXF spec requires lines <= 80 chars; rows may wrap but each new
             # row must start on a new line.
             max_line_length = 80
+
+            # TODO: verify this: GXF grid values are written as rows of length ncol.
+            # XTGeo stores regular surfaces as (ncol, nrow), therefore
+            # transpose from (ncol, nrow) to (nrow, ncol).
             values_for_write = np.ma.filled(self.values, fill_value=self.dummy).T
             for row in values_for_write:
                 tokens = [self._format_number(float(v)) for v in row]
