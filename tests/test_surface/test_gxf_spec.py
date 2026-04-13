@@ -647,3 +647,154 @@ This is not a GXF key
         match="does not match format detected from file contents"
     ):
         GXFData.from_file(path)
+
+
+class TestDummyTypePreservation:
+    """#DUMMY value should retain the type (int or float) from the input."""
+
+    @staticmethod
+    def _minimal_gxf(dummy_literal: str) -> str:
+        return f"""
+#POINTS
+"2"
+#ROWS
+"2"
+#PTSEPARATION
+"1"
+#RWSEPARATION
+"1"
+#XORIGIN
+"0"
+#YORIGIN
+"0"
+#ROTATION
+"0"
+#DUMMY
+"{dummy_literal}"
+#GRID
+1 2 3 {dummy_literal}
+"""
+
+    def test_dummy_int_from_file(self) -> None:
+        """An integer dummy like -9999 should be parsed as int."""
+        content = self._minimal_gxf("-9999")
+        result = GXFData.from_file(gxf_stream(content))
+
+        assert result.dummy == -9999
+        assert isinstance(result.dummy, int)
+
+    def test_dummy_float_from_file(self) -> None:
+        """A float dummy like -9999.0 should be parsed as float."""
+        content = self._minimal_gxf("-9999.0")
+        result = GXFData.from_file(gxf_stream(content))
+
+        assert result.dummy == pytest.approx(-9999.0)
+        assert isinstance(result.dummy, float)
+
+    def test_dummy_float_scientific_from_file(self) -> None:
+        """A scientific-notation dummy like 1e33 should be parsed as float."""
+        content = self._minimal_gxf("1e33")
+        result = GXFData.from_file(gxf_stream(content))
+
+        assert result.dummy == pytest.approx(1e33)
+        assert isinstance(result.dummy, float)
+
+    def test_dummy_int_masking(self) -> None:
+        """Grid values equal to an int dummy should be masked."""
+        content = self._minimal_gxf("-9999")
+        result = GXFData.from_file(gxf_stream(content))
+
+        assert result.values.count() == 3
+        assert result.values.mask.any()
+
+    def test_dummy_float_masking(self) -> None:
+        """Grid values equal to a float dummy should be masked."""
+        content = self._minimal_gxf("-9999.0")
+        result = GXFData.from_file(gxf_stream(content))
+
+        assert result.values.count() == 3
+        assert result.values.mask.any()
+
+    def test_dummy_int_roundtrip_file(self) -> None:
+        """Int dummy type should survive a write-then-read roundtrip."""
+        values = np.ma.array(
+            [[1.0, 3.0], [2.0, -9999.0]],
+            mask=[[False, False], [False, True]],
+        )
+        gxf = GXFData(
+            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
+            xori=0.0, yori=0.0, rotation=0.0,
+            dummy=-9999,
+            values=values,
+        )
+
+        stream = StringIO()
+        gxf.to_file(stream)
+        stream.seek(0)
+
+        re_read = GXFData.from_file(stream)
+        assert re_read.dummy == -9999
+        assert isinstance(re_read.dummy, int)
+        np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
+
+    def test_dummy_float_roundtrip_file(self) -> None:
+        """Float dummy type should survive a write-then-read roundtrip."""
+        values = np.ma.array(
+            [[1.0, 3.0], [2.0, -9999.0]],
+            mask=[[False, False], [False, True]],
+        )
+        gxf = GXFData(
+            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
+            xori=0.0, yori=0.0, rotation=0.0,
+            dummy=-9999.0,
+            values=values,
+        )
+
+        stream = StringIO()
+        gxf.to_file(stream)
+        stream.seek(0)
+
+        re_read = GXFData.from_file(stream)
+        assert re_read.dummy == pytest.approx(-9999.0)
+        assert isinstance(re_read.dummy, float)
+        np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
+
+    def test_dummy_int_roundtrip_dict(self) -> None:
+        """Int dummy type should survive a to_dict/from_dict roundtrip."""
+        values = np.ma.array(
+            [[1.0, 3.0], [2.0, -9999.0]],
+            mask=[[False, False], [False, True]],
+        )
+        gxf = GXFData(
+            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
+            xori=0.0, yori=0.0, rotation=0.0,
+            dummy=-9999,
+            values=values,
+        )
+
+        as_dict = gxf.to_dict()
+        assert isinstance(as_dict["dummy"], int)
+
+        re_read = GXFData.from_dict(as_dict)
+        assert re_read.dummy == -9999
+        assert isinstance(re_read.dummy, int)
+
+    def test_dummy_float_roundtrip_dict(self) -> None:
+        """Float dummy type should survive a to_dict/from_dict roundtrip."""
+        values = np.ma.array(
+            [[1.0, 3.0], [2.0, -9999.0]],
+            mask=[[False, False], [False, True]],
+        )
+        gxf = GXFData(
+            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
+            xori=0.0, yori=0.0, rotation=0.0,
+            dummy=-9999.0,
+            values=values,
+        )
+
+        as_dict = gxf.to_dict()
+        assert isinstance(as_dict["dummy"], float)
+
+        re_read = GXFData.from_dict(as_dict)
+        assert re_read.dummy == pytest.approx(-9999.0)
+        assert isinstance(re_read.dummy, float)

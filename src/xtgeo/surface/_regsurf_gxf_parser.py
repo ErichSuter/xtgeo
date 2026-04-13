@@ -95,7 +95,9 @@ class GXFDict(TypedDict):
     xori: float
     yori: float
     rotation: float
-    dummy: float
+    # The GXF spec allows DUMMY to be int or float, and it is important to preserve
+    # the type for correct handling of masking.
+    dummy: int | float
     values: npt.NDArray[np.float64]
 
 
@@ -110,7 +112,7 @@ class GXFData:
         "XORIGIN": 0.0,
         "YORIGIN": 0.0,
         "ROTATION": 0.0,
-        "DUMMY": 1e30,      # TODO: see Jan's prototype for this default
+        "DUMMY": 9999999.0,
     }
 
     ncol: int
@@ -120,7 +122,7 @@ class GXFData:
     xori: float
     yori: float
     rotation: float
-    dummy: float
+    dummy: int | float
     values: np.ma.MaskedArray
 
 
@@ -173,7 +175,12 @@ class GXFData:
     def _format_number(value: float | int) -> str:
         if isinstance(value, int):
             return str(value)
-        return f"{value:.16g}"
+        formatted = f"{value:.16g}"
+        # Ensure float values always contain a decimal point so that
+        # the type is preserved on re-read (e.g. -9999.0 -> "-9999.0").
+        if "." not in formatted and "e" not in formatted and "E" not in formatted:
+            formatted += ".0"
+        return formatted
 
 
     @classmethod
@@ -191,9 +198,9 @@ class GXFData:
             "XORIGIN",
             "YORIGIN",
             "ROTATION",
-            "DUMMY",
         }
-        scalar_keys = int_keys | float_keys
+        # DUMMY preserves the type from the input file.
+        scalar_keys = int_keys | float_keys | {"DUMMY"}
 
         i = 0
         while i < len(lines):
@@ -296,7 +303,16 @@ class GXFData:
             value_txt = cls._strip_optional_quotes(raw_value)
             try:
                 parsed_value: float | int
-                parsed_value = int(value_txt) if key in int_keys else float(value_txt)
+                if key in int_keys:
+                    parsed_value = int(value_txt)
+                elif key == "DUMMY":
+                    # Preserve the original type: int or float
+                    try:
+                        parsed_value = int(value_txt)
+                    except ValueError:
+                        parsed_value = float(value_txt)
+                else:
+                    parsed_value = float(value_txt)
             except ValueError as err:
                 raise ValueError(
                     f"In file {fileref_errmsg}: Invalid value '{raw_value}' for "
@@ -357,7 +373,7 @@ class GXFData:
         values_2d = np.array(grid_values, dtype=np.float64).reshape((nrow, ncol)).T
 
         if has_undefined_value:
-            dummy_val = float(scalar_values["DUMMY"])
+            dummy_val = scalar_values["DUMMY"]
             masked_values = np.ma.masked_equal(values_2d, dummy_val)
         else:
             # TODO: use default value (what is an internal sentinel?)
@@ -507,7 +523,8 @@ class GXFData:
             raise ValueError(f"Missing mandatory dictionary keys: {missing}.")
 
         values = np.array(data["values"], dtype=np.float64, copy=True)
-        masked_values = np.ma.masked_equal(values, float(data["dummy"]))
+        dummy_val = data["dummy"]
+        masked_values = np.ma.masked_equal(values, dummy_val)
 
         return cls(
             ncol=int(data["ncol"]),
@@ -517,6 +534,6 @@ class GXFData:
             xori=float(data["xori"]),
             yori=float(data["yori"]),
             rotation=float(data["rotation"]),
-            dummy=float(data["dummy"]),
+            dummy=dummy_val,
             values=masked_values,
         )
