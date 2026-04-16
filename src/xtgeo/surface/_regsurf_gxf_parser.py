@@ -43,7 +43,9 @@ Nevertheless, a typical use is to let the #GRID data represent surface elevation
 
 
 # TODO: check this, then delete comment
-#GRID contains values in row-major order (rows of length ncol), but XTGeo's internal regular surface representation is (ncol, nrow), therefore a transpose is applied on read/write.
+#GRID contains values in row-major order (rows of length ncol),
+# but XTGeo's internal regular surface representation is (ncol, nrow),
+# therefore a transpose is applied on read/write.
 
 The #SENSE key controls both the orientation of the grid and
 right-handedness/left-handedness of the coordinate system, see the GFX documentation.
@@ -63,19 +65,10 @@ from __future__ import annotations
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, TypedDict, TypeVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-import numpy.typing as npt
 from typing_extensions import Self
-
-try:
-    from typing import closed  # type: ignore[attr-defined]
-except ImportError:
-    _T = TypeVar("_T")
-
-    def closed(cls: _T) -> _T:  # no-op fallback
-        return cls
 
 
 from xtgeo.io._file import FileFormat, FileWrapper
@@ -84,21 +77,6 @@ if TYPE_CHECKING:
     from xtgeo.common.types import FileLike
 
 logger = logging.getLogger(__name__)
-
-
-@closed
-class GXFDict(TypedDict):
-    ncol: int
-    nrow: int
-    xinc: float
-    yinc: float
-    xori: float
-    yori: float
-    rotation: float
-    # The GXF spec allows DUMMY to be int or float, and it is important to preserve
-    # the type for correct handling of masking.
-    dummy: int | float
-    values: npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True)
@@ -483,57 +461,3 @@ class GXFData:
                         current_line = candidate
                 if current_line:
                     stream.write(current_line + "\n")
-
-
-    def to_dict(self) -> GXFDict:
-        """Return a dictionary representation of the GXFData object."""
-
-        return GXFDict(
-            ncol=self.ncol,
-            nrow=self.nrow,
-            xinc=self.xinc,
-            yinc=self.yinc,
-            xori=self.xori,
-            yori=self.yori,
-            rotation=self.rotation,
-            dummy=self.dummy,
-            values=np.array(
-                np.ma.filled(self.values, fill_value=self.dummy), copy=True
-            ),
-        )
-
-
-    @classmethod
-    def from_dict(cls, data: GXFDict) -> Self:
-        """Create a GXFData object from a dictionary representation."""
-
-        required = {
-            "ncol",
-            "nrow",
-            "xinc",
-            "yinc",
-            "xori",
-            "yori",
-            "rotation",
-            "dummy",
-            "values",
-        }
-        missing = sorted(required.difference(set(data.keys())))
-        if missing:
-            raise ValueError(f"Missing mandatory dictionary keys: {missing}.")
-
-        values = np.array(data["values"], dtype=np.float64, copy=True)
-        dummy_val = data["dummy"]
-        masked_values = np.ma.masked_equal(values, dummy_val)
-
-        return cls(
-            ncol=int(data["ncol"]),
-            nrow=int(data["nrow"]),
-            xinc=float(data["xinc"]),
-            yinc=float(data["yinc"]),
-            xori=float(data["xori"]),
-            yori=float(data["yori"]),
-            rotation=float(data["rotation"]),
-            dummy=dummy_val,
-            values=masked_values,
-        )

@@ -438,53 +438,6 @@ class TestGXFWriter:
         np.testing.assert_allclose(re_read.values.data, gxf.values.data)
 
 
-class TestGXFDictSerialization:
-    """Tests for to_dict / from_dict conversions."""
-
-    def test_dict_roundtrip(self) -> None:
-        values = np.ma.array(
-            [[1.0, 4.0], [2.0, 9999.0], [3.0, 6.0]],
-            mask=[[False, False], [False, True], [False, False]],
-        )
-        gxf = GXFData(
-            ncol=3,
-            nrow=2,
-            xinc=10.0,
-            yinc=20.0,
-            xori=100.0,
-            yori=200.0,
-            rotation=30.0,
-            dummy=9999.0,
-            values=values,
-        )
-
-        as_dict = gxf.to_dict()
-        re_read = GXFData.from_dict(as_dict)
-
-        assert re_read.ncol == gxf.ncol
-        assert re_read.nrow == gxf.nrow
-        assert re_read.rotation == pytest.approx(gxf.rotation)
-        np.testing.assert_allclose(re_read.values.data, gxf.values.data)
-        np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
-
-    def test_from_dict_missing_key_raises(self) -> None:
-        with pytest.raises(
-            ValueError, match="Missing mandatory dictionary keys"
-        ):
-            GXFData.from_dict(
-                {
-                    "ncol": 2,
-                    "nrow": 2,
-                    "xinc": 1.0,
-                    "yinc": 1.0,
-                    "xori": 0.0,
-                    "yori": 0.0,
-                    "rotation": 0.0,
-                    "dummy": 9999.0,
-                }
-            )
-
-
 class TestGXFDataclass:
     """Tests for GXFData dataclass properties."""
 
@@ -694,46 +647,6 @@ class TestDummyTypePreservation:
         assert re_read.dummy == pytest.approx(-9999.0)
         assert isinstance(re_read.dummy, float)
         np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
-
-    def test_dummy_int_roundtrip_dict(self) -> None:
-        """Int dummy type should survive a to_dict/from_dict roundtrip."""
-        values = np.ma.array(
-            [[1.0, 3.0], [2.0, -9999.0]],
-            mask=[[False, False], [False, True]],
-        )
-        gxf = GXFData(
-            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
-            xori=0.0, yori=0.0, rotation=0.0,
-            dummy=-9999,
-            values=values,
-        )
-
-        as_dict = gxf.to_dict()
-        assert isinstance(as_dict["dummy"], int)
-
-        re_read = GXFData.from_dict(as_dict)
-        assert re_read.dummy == -9999
-        assert isinstance(re_read.dummy, int)
-
-    def test_dummy_float_roundtrip_dict(self) -> None:
-        """Float dummy type should survive a to_dict/from_dict roundtrip."""
-        values = np.ma.array(
-            [[1.0, 3.0], [2.0, -9999.0]],
-            mask=[[False, False], [False, True]],
-        )
-        gxf = GXFData(
-            ncol=2, nrow=2, xinc=1.0, yinc=1.0,
-            xori=0.0, yori=0.0, rotation=0.0,
-            dummy=-9999.0,
-            values=values,
-        )
-
-        as_dict = gxf.to_dict()
-        assert isinstance(as_dict["dummy"], float)
-
-        re_read = GXFData.from_dict(as_dict)
-        assert re_read.dummy == pytest.approx(-9999.0)
-        assert isinstance(re_read.dummy, float)
 
 
 class TestRegularSurfaceIntegration:
