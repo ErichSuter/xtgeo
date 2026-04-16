@@ -142,7 +142,6 @@ class GXFSurface:
 
     @classmethod
     def _parse_gxf(cls, stream: TextIO, fileref_errmsg: str) -> Self:
-        lines = TextParser.iter_nonempty_lines(stream)
 
         scalar_values: dict[str, float | int] = {}
         grid_values: list[float] = []
@@ -159,18 +158,23 @@ class GXFSurface:
         # DUMMY preserves the type from the input file.
         scalar_keys = int_keys | float_keys | {"DUMMY"}
 
+        lines = TextParser.iter_nonempty_lines(stream)
         for line in lines:
-            # line is list[str] from TextParser (split on whitespace)
 
             if TextParser.is_comment(line, ["!"]):
                 continue
 
             if not TextParser.starts_with_prefix(line, "#"):
-                # Free text outside the grid section.
+                # Free text outside the grid section:
+                # All keys start with '#' or '##'
+                # Key values are handled when keys are processed
                 continue
 
             if TextParser.starts_with_prefix(line, "##"):
-                ext_key = line[0][2:] or "<EMPTY>"
+                # '<EMPTY>' is used in the warning message when there is no key
+                # after '##', to avoid an empty string in the message.
+                ext_key = line[0][2:] or "<EMPTY> (missing key after '##')"
+
                 # Skip the value line for this extension key.
                 next(lines, None)
                 msg = (
@@ -181,6 +185,9 @@ class GXFSurface:
                 warnings.warn(msg, UserWarning, stacklevel=3)
                 continue
 
+            # Set the key and handle its value on the next line..
+            # The #GRID key is handled separately since it is followed
+            # by multiple value lines.
             key = line[0][1:].upper()
 
             if key == "GRID":
@@ -204,9 +211,6 @@ class GXFSurface:
                                 "inside #GRID section."
                             ) from err
                 break
-
-            # TODO: could move the below into a validation function
-            # to be called after a parsing method
 
             if key == "SENSE":
                 # SENSE controls both the orientation
@@ -252,6 +256,7 @@ class GXFSurface:
                     f"In file {fileref_errmsg}: Missing value for key '#{key}'."
                 )
 
+            # Strip quotes around the value if present
             value_txt = raw_value.strip('"')
             try:
                 parsed_value: float | int
@@ -314,7 +319,7 @@ class GXFSurface:
         if len(grid_values) != num_expected_values:
             raise ValueError(
                 f"In file {fileref_errmsg}: Number of values in #GRID section "
-                f"is {len(grid_values)}, expected {num_expected_values} "
+                f"is {len(grid_values)}, but expected {num_expected_values} "
                 f"(ncol*nrow = {ncol}*{nrow})."
             )
 
@@ -327,8 +332,9 @@ class GXFSurface:
             dummy_val = scalar_values["DUMMY"]
             masked_values = np.ma.masked_equal(values_2d, dummy_val)
         else:
-            # TODO: use default value (what is an internal sentinel?)
-            dummy_val = 1e33  # internal sentinel; no actual masking
+            # internal sentinel; no actual masking since all values are valid.
+            # So just to satisfy the dataclass field
+            dummy_val = 1e33
             masked_values = np.ma.array(values_2d)
 
         return cls(
