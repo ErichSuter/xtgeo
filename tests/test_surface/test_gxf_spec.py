@@ -437,6 +437,23 @@ class TestGXFWriter:
         re_read = GXFSurface.from_file(stream)
         np.testing.assert_allclose(re_read.values.data, gxf.values.data)
 
+    def test_to_file_nonexistent_folder_raises(self, tmp_path) -> None:
+        """Writing to a non-existent folder should raise OSError."""
+        gxf = GXFSurface(
+            ncol=2,
+            nrow=2,
+            xinc=1.0,
+            yinc=1.0,
+            xori=0.0,
+            yori=0.0,
+            rotation=0.0,
+            dummy=-999.0,
+            values=np.ma.array([[1.0, 2.0], [3.0, 4.0]]),
+        )
+        bad_path = tmp_path / "no_such_folder" / "output.gxf"
+        with pytest.raises(OSError):
+            gxf.to_file(bad_path)
+
 
 class TestGXFDataclass:
     """Tests for GXFData dataclass properties."""
