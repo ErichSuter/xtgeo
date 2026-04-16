@@ -70,7 +70,6 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 from typing_extensions import Self
 
-
 from xtgeo.io._file import FileFormat, FileWrapper
 
 if TYPE_CHECKING:
@@ -80,7 +79,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class GXFData:
+class GXFSurface:
     """Internal immutable data representation for a regular surface in GXF format."""
 
     # GXF spec default values for optional keys.

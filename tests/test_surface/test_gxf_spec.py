@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import xtgeo
-from xtgeo.surface._regsurf_gxf_parser import GXFData
+from xtgeo.surface._regsurf_gxf_parser import GXFSurface
 
 
 def gxf_stream(content: str) -> StringIO:
@@ -49,7 +49,7 @@ class TestGXFParsing:
 
     def test_valid_with_extension_keys(self, valid_gxf_content: str) -> None:
         with pytest.warns(UserWarning) as recorded:
-            result = GXFData.from_file(gxf_stream(valid_gxf_content))
+            result = GXFSurface.from_file(gxf_stream(valid_gxf_content))
 
         warning_messages = [str(w.message) for w in recorded]
         assert any("##XMAX" in message for message in warning_messages)
@@ -79,13 +79,13 @@ class TestGXFParsing:
         path.write_text(valid_gxf_content)
 
         with pytest.warns(UserWarning):
-            result = GXFData.from_file(path)
+            result = GXFSurface.from_file(path)
 
         assert result.ncol == 3
 
     def test_nonexistent_file_raises(self) -> None:
         with pytest.raises(FileNotFoundError, match="does not exist"):
-            GXFData.from_file("this_file_does_not_exist.gxf")
+            GXFSurface.from_file("this_file_does_not_exist.gxf")
 
     @pytest.mark.parametrize("count", [5, 7])
     def test_grid_value_count_must_match_ncol_times_nrow(
@@ -116,7 +116,7 @@ class TestGXFParsing:
         with pytest.raises(
             ValueError, match="Number of values in #GRID section"
         ):
-            GXFData.from_file(gxf_stream(content))
+            GXFSurface.from_file(gxf_stream(content))
 
     def test_missing_mandatory_key_raises(self) -> None:
         """Missing #GRID (a truly required key) must raise."""
@@ -140,7 +140,7 @@ class TestGXFParsing:
 """
 
         with pytest.raises(ValueError, match="Missing mandatory key"):
-            GXFData.from_file(gxf_stream(content))
+            GXFSurface.from_file(gxf_stream(content))
 
     def test_optional_keys_default_with_warnings(self) -> None:
         """When optional keys are missing, defaults are applied with warnings."""
@@ -154,7 +154,7 @@ class TestGXFParsing:
 """
 
         with pytest.warns(UserWarning) as recorded:
-            result = GXFData.from_file(gxf_stream(content))
+            result = GXFSurface.from_file(gxf_stream(content))
 
         msgs = [str(w.message) for w in recorded]
         assert any("#PTSEPARATION" in m and "default" in m for m in msgs)
@@ -198,7 +198,7 @@ class TestGXFParsing:
 """
 
         with pytest.warns(UserWarning, match="#DUMMY"):
-            result = GXFData.from_file(gxf_stream(content))
+            result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.values.count() == 4
         assert not np.any(result.values.mask)
@@ -228,7 +228,7 @@ class TestGXFParsing:
 """
 
         with pytest.warns(UserWarning, match="#UNKNOWN_KEY"):
-            result = GXFData.from_file(gxf_stream(content))
+            result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.ncol == 3
         assert result.nrow == 2
@@ -258,7 +258,7 @@ class TestGXFParsing:
 """
 
         with pytest.raises(ValueError, match="Duplicate key"):
-            GXFData.from_file(gxf_stream(content))
+            GXFSurface.from_file(gxf_stream(content))
 
     def test_missing_grid_key_raises(self) -> None:
         content = """
@@ -281,7 +281,7 @@ class TestGXFParsing:
 """
 
         with pytest.raises(ValueError, match="Missing mandatory key '#GRID'"):
-            GXFData.from_file(gxf_stream(content))
+            GXFSurface.from_file(gxf_stream(content))
 
     def test_sense_key_warns_about_orientation(self) -> None:
         """#SENSE key should produce a specific orientation warning."""
@@ -308,7 +308,7 @@ class TestGXFParsing:
 1 2 3 4
 """
         with pytest.warns(UserWarning, match="SENSE.*orientation"):
-            result = GXFData.from_file(gxf_stream(content))
+            result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.ncol == 2
 
@@ -321,7 +321,7 @@ class TestGXFFileRoundtrip:
             [[1.0, 4.0], [2.0, 9999.0], [3.0, 6.0]],
             mask=[[False, False], [False, True], [False, False]],
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=3,
             nrow=2,
             xinc=10.0,
@@ -337,7 +337,7 @@ class TestGXFFileRoundtrip:
         gxf.to_file(stream)
         stream.seek(0)
 
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
 
         assert re_read.ncol == gxf.ncol
         assert re_read.nrow == gxf.nrow
@@ -355,7 +355,7 @@ class TestGXFFileRoundtrip:
             [[1.0, 2.0], [3.0, 9999.0]],
             mask=[[False, False], [False, True]],
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=2,
             nrow=2,
             xinc=1.0,
@@ -371,7 +371,7 @@ class TestGXFFileRoundtrip:
         gxf.to_file(stream)
         stream.seek(0)
 
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
 
         np.testing.assert_allclose(re_read.values.data, gxf.values.data)
         np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
@@ -383,7 +383,7 @@ class TestGXFFileRoundtrip:
         values = np.ma.arange(ncol * nrow, dtype=np.float64).reshape(
             (ncol, nrow)
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=ncol,
             nrow=nrow,
             xinc=1.0,
@@ -399,7 +399,7 @@ class TestGXFFileRoundtrip:
         gxf.to_file(stream)
         stream.seek(0)
 
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
         assert re_read.ncol == ncol
         assert re_read.nrow == nrow
         np.testing.assert_allclose(re_read.values.data, gxf.values.data)
@@ -415,7 +415,7 @@ class TestGXFWriter:
         values = np.ma.arange(ncol * nrow, dtype=np.float64).reshape(
             (ncol, nrow)
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=ncol,
             nrow=nrow,
             xinc=1.0,
@@ -434,7 +434,7 @@ class TestGXFWriter:
             assert len(line.rstrip("\n")) <= 80
 
         stream.seek(0)
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
         np.testing.assert_allclose(re_read.values.data, gxf.values.data)
 
 
@@ -442,7 +442,7 @@ class TestGXFDataclass:
     """Tests for GXFData dataclass properties."""
 
     def test_frozen(self) -> None:
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=2,
             nrow=2,
             xinc=1.0,
@@ -485,7 +485,7 @@ class TestFileFormatVerification:
         path = tmp_path / "test.gxf"
         path.write_text(content)
 
-        result = GXFData.from_file(path)
+        result = GXFSurface.from_file(path)
         assert result.ncol == 2
         assert result.nrow == 2
 
@@ -521,7 +521,7 @@ class TestFileFormatVerification:
             ValueError,
             match="does not match format detected from file contents",
         ):
-            GXFData.from_file(path)
+            GXFSurface.from_file(path)
 
     def test_non_gxf_extension_and_content_raises(self, tmp_path) -> None:
         """Non-.gxf file path with non-GXF content should fail."""
@@ -535,7 +535,7 @@ This is not a GXF key
             ValueError,
             match="does not match format detected from file contents",
         ):
-            GXFData.from_file(path)
+            GXFSurface.from_file(path)
 
 
 class TestDummyTypePreservation:
@@ -567,7 +567,7 @@ class TestDummyTypePreservation:
     def test_dummy_int_from_file(self) -> None:
         """An integer dummy like -9999 should be parsed as int."""
         content = self._minimal_gxf("-9999")
-        result = GXFData.from_file(gxf_stream(content))
+        result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.dummy == -9999
         assert isinstance(result.dummy, int)
@@ -575,7 +575,7 @@ class TestDummyTypePreservation:
     def test_dummy_float_from_file(self) -> None:
         """A float dummy like -9999.0 should be parsed as float."""
         content = self._minimal_gxf("-9999.0")
-        result = GXFData.from_file(gxf_stream(content))
+        result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.dummy == pytest.approx(-9999.0)
         assert isinstance(result.dummy, float)
@@ -583,7 +583,7 @@ class TestDummyTypePreservation:
     def test_dummy_float_scientific_from_file(self) -> None:
         """A scientific-notation dummy like 1e33 should be parsed as float."""
         content = self._minimal_gxf("1e33")
-        result = GXFData.from_file(gxf_stream(content))
+        result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.dummy == pytest.approx(1e33)
         assert isinstance(result.dummy, float)
@@ -591,7 +591,7 @@ class TestDummyTypePreservation:
     def test_dummy_int_masking(self) -> None:
         """Grid values equal to an int dummy should be masked."""
         content = self._minimal_gxf("-9999")
-        result = GXFData.from_file(gxf_stream(content))
+        result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.values.count() == 3
         assert result.values.mask.any()
@@ -599,7 +599,7 @@ class TestDummyTypePreservation:
     def test_dummy_float_masking(self) -> None:
         """Grid values equal to a float dummy should be masked."""
         content = self._minimal_gxf("-9999.0")
-        result = GXFData.from_file(gxf_stream(content))
+        result = GXFSurface.from_file(gxf_stream(content))
 
         assert result.values.count() == 3
         assert result.values.mask.any()
@@ -610,7 +610,7 @@ class TestDummyTypePreservation:
             [[1.0, 3.0], [2.0, -9999.0]],
             mask=[[False, False], [False, True]],
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=2, nrow=2, xinc=1.0, yinc=1.0,
             xori=0.0, yori=0.0, rotation=0.0,
             dummy=-9999,
@@ -621,7 +621,7 @@ class TestDummyTypePreservation:
         gxf.to_file(stream)
         stream.seek(0)
 
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
         assert re_read.dummy == -9999
         assert isinstance(re_read.dummy, int)
         np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)
@@ -632,7 +632,7 @@ class TestDummyTypePreservation:
             [[1.0, 3.0], [2.0, -9999.0]],
             mask=[[False, False], [False, True]],
         )
-        gxf = GXFData(
+        gxf = GXFSurface(
             ncol=2, nrow=2, xinc=1.0, yinc=1.0,
             xori=0.0, yori=0.0, rotation=0.0,
             dummy=-9999.0,
@@ -643,7 +643,7 @@ class TestDummyTypePreservation:
         gxf.to_file(stream)
         stream.seek(0)
 
-        re_read = GXFData.from_file(stream)
+        re_read = GXFSurface.from_file(stream)
         assert re_read.dummy == pytest.approx(-9999.0)
         assert isinstance(re_read.dummy, float)
         np.testing.assert_array_equal(re_read.values.mask, gxf.values.mask)

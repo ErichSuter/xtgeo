@@ -15,7 +15,7 @@ from xtgeo import _cxtgeo
 from xtgeo.common.constants import UNDEF_MAP_IRAPA, UNDEF_MAP_IRAPB
 from xtgeo.common.log import null_logger
 
-from ._regsurf_gxf_parser import GXFData
+from ._regsurf_gxf_parser import GXFSurface
 
 if TYPE_CHECKING:
     from xtgeo.io._file import FileWrapper
@@ -182,7 +182,7 @@ def export_ijxyz_ascii(self: RegularSurface, mfile: FileWrapper) -> None:
 
 def export_gxf(self: RegularSurface, mfile: FileWrapper) -> None:
     """Export to GXF ascii format through the dedicated parser class."""
-    gxf_data = GXFData(
+    gxf_data = GXFSurface(
         ncol=self.ncol,
         nrow=self.nrow,
         xori=self.xori,
