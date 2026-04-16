@@ -129,14 +129,14 @@ class GXFData:
     def __post_init__(self) -> None:
         values = np.ma.array(self.values, dtype=np.float64, copy=True)
 
+        if self.ncol <= 0 or self.nrow <= 0:
+            raise ValueError("ncol and nrow must be positive integers.")
+
         if values.shape != (self.ncol, self.nrow):
             raise ValueError(
                 "Invalid shape of surface values in the #GRID section. \n"
                 f"Expected {(self.ncol, self.nrow)}, got {values.shape}."
             )
-
-        if self.ncol <= 0 or self.nrow <= 0:
-            raise ValueError("ncol and nrow must be positive integers.")
 
         if self.xinc <= 0.0 or self.yinc <= 0.0:
             raise ValueError("xinc and yinc must be positive numbers.")
