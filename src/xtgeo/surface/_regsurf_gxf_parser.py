@@ -71,8 +71,11 @@ import numpy as np
 from typing_extensions import Self
 
 from xtgeo.io._file import FileFormat, FileWrapper
+from xtgeo.io._text_parser import TextParser
 
 if TYPE_CHECKING:
+    from typing import TextIO
+
     from xtgeo.common.types import FileLike
 
 logger = logging.getLogger(__name__)
@@ -126,29 +129,6 @@ class GXFSurface:
 
 
     @staticmethod
-    def _strip_optional_quotes(value: str) -> str:
-        stripped = value.strip()
-        if len(stripped) >= 2 and stripped[0] == '"' and stripped[-1] == '"':
-            return stripped[1:-1]
-        return stripped
-
-
-    @staticmethod
-    def _next_value_line(
-        lines: list[str], start_index: int, fileref_errmsg: str
-    ) -> int:
-        """Find the next non-empty line index used as a value line."""
-        idx = start_index
-        while idx < len(lines) and lines[idx].strip() == "":
-            idx += 1
-
-        if idx >= len(lines):
-            raise ValueError(f"In file {fileref_errmsg}: Missing value for key.")
-
-        return idx
-
-
-    @staticmethod
     def _format_number(value: float | int) -> str:
         if isinstance(value, int):
             return str(value)
@@ -161,8 +141,8 @@ class GXFSurface:
 
 
     @classmethod
-    def _parse_gxf(cls, text: str, fileref_errmsg: str) -> Self:
-        lines = text.splitlines()
+    def _parse_gxf(cls, stream: TextIO, fileref_errmsg: str) -> Self:
+        lines = TextParser.iter_nonempty_lines(stream)
 
         scalar_values: dict[str, float | int] = {}
         grid_values: list[float] = []
@@ -179,50 +159,43 @@ class GXFSurface:
         # DUMMY preserves the type from the input file.
         scalar_keys = int_keys | float_keys | {"DUMMY"}
 
-        i = 0
-        while i < len(lines):
-            stripped = lines[i].strip()
+        for line in lines:
+            # line is list[str] from TextParser (split on whitespace)
 
-            if not stripped or stripped.startswith("!"):
-                i += 1
+            if TextParser.is_comment(line, ["!"]):
                 continue
 
-            if not stripped.startswith("#"):
+            if not TextParser.starts_with_prefix(line, "#"):
                 # Free text outside the grid section.
-                i += 1
                 continue
 
-            if stripped.startswith("##"):
-                ext_key = stripped[2:].strip() or "<EMPTY>"
-                i = cls._next_value_line(lines, i + 1, fileref_errmsg)
+            if TextParser.starts_with_prefix(line, "##"):
+                ext_key = line[0][2:] or "<EMPTY>"
+                # Skip the value line for this extension key.
+                next(lines, None)
                 msg = (
                     f"In file {fileref_errmsg}: Ignoring unsupported extension "
                     f"key '##{ext_key}'."
                 )
                 logger.warning(msg)
                 warnings.warn(msg, UserWarning, stacklevel=3)
-                i += 1
                 continue
 
-            key = stripped[1:].strip().upper()
+            key = line[0][1:].upper()
 
             if key == "GRID":
                 grid_found = True
-                i += 1
-                while i < len(lines):
-                    grid_line = lines[i].strip()
-                    i += 1
-
-                    if not grid_line or grid_line.startswith("!"):
+                for grid_line in lines:
+                    if TextParser.is_comment(grid_line, ["!"]):
                         continue
 
-                    if grid_line.startswith("#"):
+                    if TextParser.starts_with_prefix(grid_line, "#"):
                         raise ValueError(
-                            f"In file {fileref_errmsg}: Unexpected key '{grid_line}' "
-                            "inside #GRID section."
+                            f"In file {fileref_errmsg}: Unexpected key "
+                            f"'{''.join(grid_line)}' inside #GRID section."
                         )
 
-                    for token in grid_line.split():
+                    for token in grid_line:
                         try:
                             grid_values.append(float(token))
                         except ValueError as err:
@@ -230,7 +203,6 @@ class GXFSurface:
                                 f"In file {fileref_errmsg}: Invalid value '{token}' "
                                 "inside #GRID section."
                             ) from err
-
                 break
 
             # TODO: could move the below into a validation function
@@ -242,7 +214,7 @@ class GXFSurface:
                 # of the coordinate system.
                 # The current implementation does not take this parameter
                 # into account.
-                i = cls._next_value_line(lines, i + 1, fileref_errmsg)
+                next(lines, None)  # skip value line
                 msg = (
                     f"In file {fileref_errmsg}: Ignoring '#SENSE' key. "
                     "This key may affect grid orientation but is not "
@@ -251,18 +223,16 @@ class GXFSurface:
                 )
                 logger.warning(msg)
                 warnings.warn(msg, UserWarning, stacklevel=3)
-                i += 1
                 continue
 
             if key not in scalar_keys:
-                i = cls._next_value_line(lines, i + 1, fileref_errmsg)
+                next(lines, None)  # skip value line
                 msg = (
                     f"In file {fileref_errmsg}: Ignoring unsupported "
                     f"key '#{key}'."
                 )
                 logger.warning(msg)
                 warnings.warn(msg, UserWarning, stacklevel=3)
-                i += 1
                 continue
 
             if key in scalar_values:
@@ -270,14 +240,19 @@ class GXFSurface:
                     f"In file {fileref_errmsg}: Duplicate key '#{key}' is not allowed."
                 )
 
-            i = cls._next_value_line(lines, i + 1, fileref_errmsg)
-            raw_value = lines[i].strip()
+            value_line = next(lines, None)
+            if value_line is None:
+                raise ValueError(
+                    f"In file {fileref_errmsg}: Missing value for key '#{key}'."
+                )
+
+            raw_value = value_line[0]
             if raw_value.startswith("#"):
                 raise ValueError(
                     f"In file {fileref_errmsg}: Missing value for key '#{key}'."
                 )
 
-            value_txt = cls._strip_optional_quotes(raw_value)
+            value_txt = raw_value.strip('"')
             try:
                 parsed_value: float | int
                 if key in int_keys:
@@ -297,7 +272,6 @@ class GXFSurface:
                 ) from err
 
             scalar_values[key] = parsed_value
-            i += 1
 
         # Check for required keys
         required = ["POINTS", "ROWS"]
@@ -391,7 +365,7 @@ class GXFSurface:
         wrapped_file.fileformat(FileFormat.GXF.value[0], strict=True)
 
         with wrapped_file.get_text_stream_read(encoding=encoding) as stream:
-            return cls._parse_gxf(stream.read(), fileref_errmsg=str(wrapped_file.name))
+            return cls._parse_gxf(stream, fileref_errmsg=str(wrapped_file.name))
 
 
     def to_file(
