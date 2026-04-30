@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from osgeo import gdal
+import pprint
 
 # Open the GXF file
 print(os.getcwd())
@@ -17,9 +18,18 @@ gdal.UseExceptions()
 # gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test_2_rotated.gxf"         # NOK
 gxf_file = "../xtgeo-testdata/surfaces/etc/fdata_test_2_rotated_no_header.gxf"         # OK?
 
-dataset = gdal.Open(gxf_file)
+with gdal.Open(gxf_file) as dataset:
 
-if dataset is not None:
+    #-----------------------------------------------------------------
+    print("This is weird, but this reader doesn't read the #ROTATION")
+    print("So not very useful")
+    print("")
+    #-----------------------------------------------------------------
+
+    info = gdal.Info(dataset, format='json')
+    del info["stac"]  # to avoid cluttering below output
+    pprint.pprint(info, indent=2, width=100)
+
     # Get dimensions
     width = dataset.RasterXSize
     height = dataset.RasterYSize
@@ -88,9 +98,3 @@ if dataset is not None:
     # TODO:
     # GetNextFeature()
     # FlushCache(self, *args): write to disk
-
-
-    # Clean up
-    dataset = None
-else:
-    print(f"Failed to open {gxf_file}")
