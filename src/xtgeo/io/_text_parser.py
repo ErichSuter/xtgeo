@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-TextLine = list[str]
+TokenizedLine = list[str]
 
 _BASE10_NUMBER: re.Pattern[str] = re.compile(
     r"[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?"
@@ -30,7 +30,7 @@ class TextParser:
     @staticmethod
     def iter_nonempty_lines(
         stream: Iterable[str],
-    ) -> Iterator[TextLine]:
+    ) -> Iterator[TokenizedLine]:
         """
         Lazily iterate over text lines, yielding lists of strings
         typically representing words and numbers.
@@ -47,7 +47,7 @@ class TextParser:
     @staticmethod
     def iter_nonempty_noncomment_lines(
         stream: Iterable[str], comment_prefixes: list[str]
-    ) -> Iterator[TextLine]:
+    ) -> Iterator[TokenizedLine]:
         """
         Lazily iterate over text lines, yielding lists of strings.
         Filters out empty lines and comment lines.
@@ -59,7 +59,7 @@ class TextParser:
             yield line
 
     @staticmethod
-    def is_comment(line: TextLine, comment_prefixes: list[str]) -> bool:
+    def is_comment(line: TokenizedLine, comment_prefixes: list[str]) -> bool:
         """
         Check if a line is a comment line,
         starting with any of the comment prefixes.
@@ -69,7 +69,7 @@ class TextParser:
         return any(line[0].startswith(prefix) for prefix in comment_prefixes)
 
     @staticmethod
-    def starts_with_prefix(line: TextLine, prefix: str) -> bool:
+    def starts_with_prefix(line: TokenizedLine, prefix: str) -> bool:
         """
         Check if line starts with a specific prefix, typically being a keyword
         indicating a specific section of the file and followed by
@@ -100,7 +100,7 @@ class TextParser:
 
     @staticmethod
     def is_single_finite_base10_value(
-        value_line: TextLine,
+        value_line: TokenizedLine,
     ) -> TextParser.NumericValueErrorCode:
         """
         - Single value or not

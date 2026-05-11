@@ -1,6 +1,7 @@
 import warnings
+from collections.abc import Iterable, Iterator
 from dataclasses import asdict, dataclass
-from typing import Any, Generator, NotRequired, TextIO, TypedDict, TypeVar, cast
+from typing import Any, NotRequired, TypedDict, TypeVar, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +18,7 @@ except ImportError:
 
 from xtgeo.common.types import FileLike
 from xtgeo.io._file import FileFormat, FileWrapper
+from xtgeo.io._text_parser import TextParser, TokenizedLine
 
 
 @closed
@@ -332,27 +334,7 @@ class TSurfData:
         return self.triangles
 
     @staticmethod
-    def _read_line(
-        stream: TextIO,
-    ) -> Generator[list[str], None, None]:
-        """
-        Iterate over lines from a TextIO, yielding lists of strings.
-        Filters out empty lines and comment lines.
-        """
-        for line in stream:
-            split_line = line.strip().split()
-
-            if not split_line:
-                continue
-
-            # Skip comments
-            if split_line[0].startswith("#"):
-                continue
-
-            yield split_line
-
-    @staticmethod
-    def _is_header_section_first_line(line: list[str]) -> bool:
+    def _is_header_section_first_line(line: TokenizedLine) -> bool:
         """Check if the line is "HEADER {", to indicate the start of a HEADER section.
 
         Args:
@@ -366,7 +348,7 @@ class TSurfData:
         return len(line) == 2 and line[0] == "HEADER" and line[1] == "{"
 
     @staticmethod
-    def _is_coordinate_system_section_first_line(line: list[str]) -> bool:
+    def _is_coordinate_system_section_first_line(line: TokenizedLine) -> bool:
         """Check if the line is "GOCAD_ORIGINAL_COORDINATE_SYSTEM",
         which indicates the start of a COORDINATE_SYSTEM section.
 
@@ -381,7 +363,7 @@ class TSurfData:
         return len(line) == 1 and line[0] == "GOCAD_ORIGINAL_COORDINATE_SYSTEM"
 
     @staticmethod
-    def _is_tface_section_first_line(line: list[str]) -> bool:
+    def _is_tface_section_first_line(line: TokenizedLine) -> bool:
         """Check if the line is "TFACE", which indicates the start of a TFACE section.
 
         Args:
@@ -395,11 +377,13 @@ class TSurfData:
         return len(line) == 1 and line[0] == "TFACE"
 
     @staticmethod
-    def _parse_header_section(stream: TextIO, fileref_errmsg: str) -> str:
+    def _parse_header_section(
+        lines: Iterator[TokenizedLine], fileref_errmsg: str
+    ) -> str:
         """Parse the HEADER section and extract the surface name.
 
         Args:
-            stream: Text stream to read from
+            lines: Tokenized text lines to read from
             fileref_errmsg: Error context for meaningful error messages
 
         Returns:
@@ -423,12 +407,12 @@ class TSurfData:
         # Is '}' present to end the HEADER section?
         end_is_present = False
 
-        for line in TSurfData._read_line(stream):
+        for line in lines:
             # Assume it can be either ['name:F5'] or ['name:', 'F5']
             # Assume the name itself may be split into several strings:
             # e.g. 'name:Massive listric fault' -> ['Massive', 'listric', 'fault']
             # Assume line[0] is lowercase
-            if line[0].startswith("name:"):
+            if TextParser.starts_with_prefix(line, "name:"):
                 # Extract name after the colon and join with remaining parts
                 tmp = [line[0][5:]] + line[1:]
                 header_name = [item.strip() for item in tmp if item.strip() != ""]
@@ -447,12 +431,12 @@ class TSurfData:
 
     @staticmethod
     def _parse_coordinate_system_section(
-        stream: TextIO, fileref_errmsg: str
+        lines: Iterator[TokenizedLine], fileref_errmsg: str
     ) -> TSurfCoordinateSystemDict:
         """Parse the coordinate system section.
 
         Args:
-            stream: Text stream to read from
+            lines: Tokenized text lines to read from
             fileref_errmsg: Error context for meaningful error messages
 
         Returns:
@@ -487,15 +471,19 @@ class TSurfData:
         end_is_present = False
 
         # Parse coordinate system attributes
-        for line in TSurfData._read_line(stream):
+        for line in lines:
             if line[0] == "NAME":
                 coord_sys_data["name"] = " ".join(line[1:])
             elif line[0] == "AXIS_NAME":
                 # Extract axis names and remove quotes
-                coord_sys_data["axis_name"] = tuple(y.strip('"') for y in line[1:4])
+                coord_sys_data["axis_name"] = tuple(
+                    TextParser.strip_surrounding_quotes(y) for y in line[1:4]
+                )
             elif line[0] == "AXIS_UNIT":
                 # Extract axis units and remove quotes
-                coord_sys_data["axis_unit"] = tuple(y.strip('"') for y in line[1:4])
+                coord_sys_data["axis_unit"] = tuple(
+                    TextParser.strip_surrounding_quotes(y) for y in line[1:4]
+                )
             elif line[0] == "ZPOSITIVE":
                 # Extract zpositive value
                 coord_sys_data["zpositive"] = line[1]
@@ -523,13 +511,13 @@ class TSurfData:
 
     @staticmethod
     def _parse_tface_section(
-        stream: TextIO, fileref_errmsg: str
+        lines: Iterator[TokenizedLine], fileref_errmsg: str
     ) -> tuple[list[list[float]], list[list[int]]]:
         """Parse the TFACE section with data defining a triangulated surface
         (vertices and triangles).
 
         Args:
-            stream: Text stream to read from
+            lines: Tokenized text lines to read from
             fileref_errmsg: Error context for meaningful error messages
 
         Returns:
@@ -570,7 +558,7 @@ class TSurfData:
         # Is 'END' statement present to end the TFACE section?
         end_is_present = False
 
-        for line in TSurfData._read_line(stream):
+        for line in lines:
             if line[0] == "VRTX":
                 if len(line) != 6 or line[1] != str(vrtx_no + 1) or line[5] != "CNXYZ":
                     err_msg_vrtx += f"Failing line: '{line}'"
@@ -690,12 +678,12 @@ class TSurfData:
         )
 
     @classmethod
-    def _parse_tsurf(cls, stream: TextIO, fileref_errmsg: str) -> Self:
+    def _parse_tsurf(cls, raw_lines: Iterable[str], fileref_errmsg: str) -> Self:
         """
-        Parse a TSurf file from a file stream.
+        Parse a TSurf file from a list of text lines.
 
         Args:
-            stream: A stream of the TSurf file.
+            raw_lines: Text lines from the TSurf file.
             fileref_errmsg: Error context for meaningful error messages
 
         Note:
@@ -718,13 +706,15 @@ class TSurfData:
         coord_sys_section_completed = False
         tface_section_completed = False
 
+        token_lines = TextParser.iter_nonempty_noncomment_lines(raw_lines, ["#"])
+
         # Skip the already verified TSurf signature line
-        next(TSurfData._read_line(stream))
+        next(token_lines)
 
         # Loop over sections, each section starts with a specific keyword.
         # For each section there is a parsing function
         # which reads lines until the end of the section.
-        for line in TSurfData._read_line(stream):
+        for line in token_lines:
             if TSurfData._is_header_section_first_line(line):
                 # Ensure only one section of this type
                 if header_section_completed:
@@ -735,7 +725,9 @@ class TSurfData:
                     )
                 header_section_completed = True
 
-                header_name = TSurfData._parse_header_section(stream, fileref_errmsg)
+                header_name = TSurfData._parse_header_section(
+                    token_lines, fileref_errmsg
+                )
                 header_dict = TSurfHeaderDict({"name": header_name})
                 TSurfHeader.validate(header_dict, fileref_errmsg)
                 continue
@@ -751,7 +743,7 @@ class TSurfData:
                 coord_sys_section_completed = True
 
                 coord_sys_data = TSurfData._parse_coordinate_system_section(
-                    stream, fileref_errmsg
+                    token_lines, fileref_errmsg
                 )
                 continue
 
@@ -766,7 +758,7 @@ class TSurfData:
                 tface_section_completed = True
 
                 vertices, triangles = TSurfData._parse_tface_section(
-                    stream, fileref_errmsg
+                    token_lines, fileref_errmsg
                 )
                 continue
 
