@@ -22,9 +22,11 @@ class _FakeInstance:
 
     def __init__(self, location: str = "localhost:50051") -> None:
         self.location = location
+        self.project: object | None = None
+        self.exited = False
 
     def exit(self) -> None:  # used by RipsApiUtils.terminate
-        pass
+        self.exited = True
 
 
 def _make_fake_rips_module(
@@ -174,9 +176,71 @@ def test_find_instance_with_port_constructs_instance(install_fake_rips):
 
 
 def test_find_instance_with_port_wraps_exception(install_fake_rips):
-    install_fake_rips(
-        _make_fake_rips_module(port_ctor_raises=RuntimeError("denied"))
-    )
+    install_fake_rips(_make_fake_rips_module(port_ctor_raises=RuntimeError("denied")))
 
     with pytest.raises(RuntimeError, match="Unable to connect to a ResInsight .* 1234"):
         RipsApiUtils.find_instance(port=1234)
+
+
+# --- project / save_project / close_project / terminate ----------------------
+
+
+class _RecordingProject:
+    def __init__(self) -> None:
+        self.saved_with: str | None = None
+        self.closed = False
+
+    def save(self, name: str) -> None:
+        self.saved_with = name
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _util_with_project(install_fake_rips):
+    """Build a RipsApiUtils wrapping a fake instance with a recording project."""
+    fake = _make_fake_rips_module()
+    install_fake_rips(fake)
+    instance = fake.Instance(port=50051)  # type: ignore[attr-defined]
+    project = _RecordingProject()
+    instance.project = project
+    util = RipsApiUtils(instance_or_port=instance)
+    return util, instance, project
+
+
+def test_project_property_returns_instance_project(install_fake_rips):
+    util, _instance, project = _util_with_project(install_fake_rips)
+
+    assert util.project is project
+
+
+def test_save_project_passes_name(install_fake_rips):
+    util, _instance, project = _util_with_project(install_fake_rips)
+
+    util.save_project("my_project.rsp")
+
+    assert project.saved_with == "my_project.rsp"
+
+
+def test_save_project_default_name_is_empty(install_fake_rips):
+    util, _instance, project = _util_with_project(install_fake_rips)
+
+    util.save_project()
+
+    assert project.saved_with == ""
+
+
+def test_close_project_calls_close(install_fake_rips):
+    util, _instance, project = _util_with_project(install_fake_rips)
+
+    util.close_project()
+
+    assert project.closed is True
+
+
+def test_terminate_calls_instance_exit(install_fake_rips):
+    util, instance, _project = _util_with_project(install_fake_rips)
+
+    util.terminate()
+
+    assert instance.exited is True
