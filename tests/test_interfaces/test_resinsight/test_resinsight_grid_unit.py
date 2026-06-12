@@ -56,12 +56,17 @@ def test_reader_load_builds_grid_data(ri_fakes):
 
     data = reader.load("EXAMPLE")
 
+    nx, ny, nz = ri_fakes.NX, ri_fakes.NY, ri_fakes.NZ
     assert data.name == "EXAMPLE"
-    assert (data.nx, data.ny, data.nz) == (ri_fakes.NX, ri_fakes.NY, ri_fakes.NZ)
+    assert (data.nx, data.ny, data.nz) == (nx, ny, nz)
     assert data.filesrc == "/path/emerald.roff"
     assert data.coordsv.dtype == np.float64
     assert data.zcornsv.dtype == np.float32
     assert data.actnumsv.dtype == np.int32
+    # Array sizes must be consistent with the declared grid dimensions
+    assert data.coordsv.size == (nx + 1) * (ny + 1) * 6
+    assert data.zcornsv.size == nx * ny * nz * 8
+    assert data.actnumsv.size == nx * ny * nz
 
 
 def test_reader_load_empty_file_path_defaults_to_blank(ri_fakes):
@@ -101,12 +106,22 @@ def test_writer_save_creates_when_no_existing_case(ri_fakes):
     new_case = ri_fakes.NewCase()
     project = ri_fakes.Project(cases=[], create_result=new_case)
     writer = _writer_with_project(ri_fakes, project)
+    data = _sample_data(ri_fakes)
 
-    writer.save(_sample_data(ri_fakes), gname="NEW")
+    writer.save(data, gname="NEW")
 
-    assert project.created_kwargs is not None
-    assert project.created_kwargs["name"] == "NEW"
-    assert project.created_kwargs["nx"] == ri_fakes.NX
+    kwargs = project.created_kwargs
+    assert kwargs is not None
+    assert kwargs["name"] == "NEW"
+    assert (kwargs["nx"], kwargs["ny"], kwargs["nz"]) == (
+        ri_fakes.NX,
+        ri_fakes.NY,
+        ri_fakes.NZ,
+    )
+    # The grid arrays must be forwarded unchanged to ResInsight
+    assert kwargs["coord"] is data.coordsv
+    assert kwargs["zcorn"] is data.zcornsv
+    assert kwargs["actnum"] is data.actnumsv
     assert new_case.file_path == "data.roff"
     assert new_case.updated is True
 
