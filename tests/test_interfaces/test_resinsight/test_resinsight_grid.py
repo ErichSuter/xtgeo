@@ -147,6 +147,93 @@ def test_roundtrip_hypothesis(grid: xtgeo.Grid):
     assert np.array_equal(grid._actnumsv, restored._actnumsv)
 
 
+# ---------------------------------------------------------------------------
+# GridDataResInsight.__eq__ (no ResInsight required)
+# ---------------------------------------------------------------------------
+
+
+def _make_grid_data(**overrides) -> GridDataResInsight:
+    """Build a valid 2x2x2 GridDataResInsight, with optional field overrides."""
+    defaults = {
+        "name": "EQ",
+        "nx": 2,
+        "ny": 2,
+        "nz": 2,
+        "coordsv": np.zeros((2 + 1) * (2 + 1) * 6, dtype=np.float64),
+        "zcornsv": np.zeros(2 * 2 * 2 * 8, dtype=np.float32),
+        "actnumsv": np.ones(2 * 2 * 2, dtype=np.int32),
+        "filesrc": "grid.roff",
+    }
+    defaults.update(overrides)
+    return GridDataResInsight(**defaults)
+
+
+def test_eq_identical_instances_are_equal():
+    assert _make_grid_data() == _make_grid_data()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"name": "OTHER"},
+        {
+            "nx": 1,
+            "coordsv": np.zeros((1 + 1) * (2 + 1) * 6, dtype=np.float64),
+            "zcornsv": np.zeros(1 * 2 * 2 * 8, dtype=np.float32),
+            "actnumsv": np.ones(1 * 2 * 2, dtype=np.int32),
+        },
+        {"coordsv": np.ones((2 + 1) * (2 + 1) * 6, dtype=np.float64)},
+        {"zcornsv": np.ones(2 * 2 * 2 * 8, dtype=np.float32)},
+        {"actnumsv": np.zeros(2 * 2 * 2, dtype=np.int32)},
+        {"filesrc": "different.roff"},
+    ],
+    ids=["name", "dims", "coordsv", "zcornsv", "actnumsv", "filesrc"],
+)
+def test_eq_differing_field_is_not_equal(overrides):
+    assert _make_grid_data() != _make_grid_data(**overrides)
+
+
+def test_eq_with_non_griddata_returns_not_equal():
+    data = _make_grid_data()
+    assert (data == "not a GridDataResInsight") is False
+    assert data != 42
+
+
+def test_griddata_is_unhashable():
+    with pytest.raises(TypeError):
+        hash(_make_grid_data())
+
+
+# ---------------------------------------------------------------------------
+# from_xtgeo_grid actnum=None branch (no ResInsight required)
+# ---------------------------------------------------------------------------
+
+
+def test_from_xtgeo_grid_defaults_actnum_when_none(monkeypatch):
+    """When the underlying EGrid has no actnum, from_xtgeo_grid defaults it
+    to all-ones of length nx*ny*nz."""
+
+    class _FakeEGrid:
+        dimensions = (2, 2, 2)
+        coord = np.zeros((2 + 1) * (2 + 1) * 6, dtype=np.float64)
+        zcorn = np.zeros(2 * 2 * 2 * 8, dtype=np.float32)
+        actnum = None
+
+    from xtgeo.interfaces.resinsight import _grid as grid_mod
+
+    monkeypatch.setattr(
+        grid_mod.EGrid, "from_xtgeo_grid", staticmethod(lambda _grid: _FakeEGrid())
+    )
+
+    data = GridDataResInsight.from_xtgeo_grid(
+        xtgeo.create_box_grid((2, 2, 2)), name="NOACT", filesrc="x.roff"
+    )
+
+    assert data.actnumsv.size == 2 * 2 * 2
+    assert np.array_equal(data.actnumsv, np.ones(2 * 2 * 2, dtype=np.int32))
+    assert data.actnumsv.dtype == np.int32
+
+
 @pytest.mark.requires_resinsight
 def test_reader_init(resinsight_instance):
     """Test that GridReader can load grid metadata from ResInsight cases."""
