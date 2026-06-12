@@ -59,30 +59,50 @@ def _load_package(package_name: str) -> Any | None:
         return None
 
 
-rips = _load_package("rips")
-_rips_import_error: str | None = None
+def _import_rips_symbols(
+    rips_module: Any,
+) -> tuple[tuple[Any, Any, Any] | None, str | None]:
+    """Extract the required API symbols from a loaded ``rips`` module.
 
-if rips is not None:  # pragma: no cover - requires rips installed
+    Returns a ``(symbols, error)`` pair. On success ``symbols`` is the
+    ``(Case, Instance, Project)`` tuple and ``error`` is ``None``. On failure
+    ``symbols`` is ``None`` and ``error`` is a user-facing message describing
+    which part of the contract is missing.
+    """
     try:
-        from rips import (
-            Case as _RipsCase,
-            Instance as _RipsInstance,
-            Project as _RipsProject,
-        )
-    except ImportError as err:
-        _rips_import_error = (
+        return (
+            rips_module.Case,
+            rips_module.Instance,
+            rips_module.Project,
+        ), None
+    except AttributeError as err:
+        return None, (
             f"The installed rips package does not provide the required API "
             f"symbols (Case, Instance, Project): {err}. "
             f"Please upgrade: pip install 'rips>={MIN_RIPS_VERSION}'"
         )
-        rips = None
-        _RipsCase = Any  # type: ignore[misc,assignment]
-        _RipsInstance = Any  # type: ignore[misc,assignment]
-        _RipsProject = Any  # type: ignore[misc,assignment]
-else:
-    _RipsCase = Any  # type: ignore[misc,assignment]
-    _RipsInstance = Any  # type: ignore[misc,assignment]
-    _RipsProject = Any  # type: ignore[misc,assignment]
+
+
+def _resolve_rips() -> tuple[Any | None, str | None, tuple[Any, Any, Any]]:
+    """Load ``rips`` and resolve the required API symbols.
+
+    Returns ``(rips_module, error, (Case, Instance, Project))``. When ``rips``
+    is unavailable or incomplete, ``rips_module`` is ``None`` and the symbol
+    triple falls back to :data:`typing.Any` placeholders so the module can
+    still be imported and inspected.
+    """
+    module = _load_package("rips")
+    if module is None:
+        return None, None, (Any, Any, Any)
+
+    symbols, error = _import_rips_symbols(module)
+    if symbols is None:
+        return None, error, (Any, Any, Any)
+
+    return module, None, symbols
+
+
+rips, _rips_import_error, (_RipsCase, _RipsInstance, _RipsProject) = _resolve_rips()
 
 RipsCaseType: TypeAlias = _RipsCase  # type: ignore[misc]
 RipsInstanceType: TypeAlias = _RipsInstance  # type: ignore[misc]

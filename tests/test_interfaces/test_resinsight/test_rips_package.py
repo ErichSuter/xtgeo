@@ -8,6 +8,7 @@ require_rips() without needing an actual rips installation or ResInsight executa
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -95,3 +96,59 @@ def test_require_rips_passes_when_rips_available_and_version_ok():
         ),
     ):
         _rips_package.require_rips()
+
+
+# Tests for _import_rips_symbols()
+
+
+def test_import_rips_symbols_returns_tuple_when_complete():
+    fake = SimpleNamespace(Case="C", Instance="I", Project="P")
+
+    symbols, error = _rips_package._import_rips_symbols(fake)
+
+    assert symbols == ("C", "I", "P")
+    assert error is None
+
+
+def test_import_rips_symbols_returns_error_when_symbol_missing():
+    fake = SimpleNamespace(Case="C", Instance="I")  # no Project
+
+    symbols, error = _rips_package._import_rips_symbols(fake)
+
+    assert symbols is None
+    assert error is not None
+    assert "Case, Instance, Project" in error
+    assert _rips_package.MIN_RIPS_VERSION in error
+
+
+# Tests for _resolve_rips()
+
+
+def test_resolve_rips_returns_placeholders_when_package_missing():
+    with patch.object(_rips_package, "_load_package", return_value=None):
+        module, error, symbols = _rips_package._resolve_rips()
+
+    assert module is None
+    assert error is None
+    assert symbols == (_rips_package.Any, _rips_package.Any, _rips_package.Any)
+
+
+def test_resolve_rips_returns_symbols_when_package_complete():
+    fake = SimpleNamespace(Case="C", Instance="I", Project="P")
+    with patch.object(_rips_package, "_load_package", return_value=fake):
+        module, error, symbols = _rips_package._resolve_rips()
+
+    assert module is fake
+    assert error is None
+    assert symbols == ("C", "I", "P")
+
+
+def test_resolve_rips_returns_error_and_placeholders_when_symbol_missing():
+    fake = SimpleNamespace(Case="C", Instance="I")  # no Project
+    with patch.object(_rips_package, "_load_package", return_value=fake):
+        module, error, symbols = _rips_package._resolve_rips()
+
+    assert module is None
+    assert error is not None
+    assert "Case, Instance, Project" in error
+    assert symbols == (_rips_package.Any, _rips_package.Any, _rips_package.Any)
