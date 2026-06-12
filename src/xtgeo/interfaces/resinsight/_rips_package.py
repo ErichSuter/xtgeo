@@ -62,7 +62,7 @@ def _load_package(package_name: str) -> Any | None:
 rips = _load_package("rips")
 _rips_import_error: str | None = None
 
-if rips is not None:
+if rips is not None:  # pragma: no cover - requires rips installed
     try:
         from rips import (
             Case as _RipsCase,
